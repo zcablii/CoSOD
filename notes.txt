@@ -1,0 +1,18 @@
+https://detectron2.readthedocs.io/tutorials/install.html
+CUDA_VERSION = torch.__version__.split("+")[-1] 
+pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu113/torch1.10/index.html# replace cu113 with CUDA_VERSION
+
+1. 
+2. # loss function gives more weights to positive loss. (pos:neg = 0.55:0.45)
+3. Finalise train.py: a tidy style, save&load checkpoint pkl, log file... 
+4. Add eval 
+5. Fine tune
+
+
+
+Random notes:
+
+
+3. Positional embeddings added at each encoder layers? 
+4. Auxiliary loss at each layer of transformer encoder?
+5. # Replace the current transformer with DETR version with minor adaptive customization.
