@@ -24,6 +24,7 @@ from parameter import *
 from einops import rearrange
 from einops.layers.torch import Rearrange
 from torch import Tensor
+import parameter
 
 
 # mask_rcnn_R_101_C4_3x.yaml
@@ -42,7 +43,7 @@ class RPNet(nn.Module):
 
         self.model = build_model(self.cfg)
 
-        DetectionCheckpointer(self.model).load("./models/"+backbone+".pkl")
+        DetectionCheckpointer(self.model).load(pretrained_detection_models_path+backbone+".pkl")
         self.model.eval()
 
     def forward(self,image_Input):
@@ -84,8 +85,8 @@ class RPNet(nn.Module):
                 #     each_img_boxes_features = roi_cut(feature_map,img_boxes,order) # implement roi cut!
                 #     box_features_.append(each_img_boxes_features)
                 # box_features_=torch.cat(box_features_)
-                # if draw_box:
-                #     write_boxes_imgs(nms_boxes,image_Input)
+                if parameter.draw_box:
+                    write_boxes_imgs(nms_boxes,image_Input)
 
                 box_features_ = self.model.roi_heads.pooler(features_, nms_boxes) #  [n,1024,14,14] pooler.py line ~220
             self.model.train()  
@@ -136,7 +137,7 @@ class CoS_Classifier(nn.Module):
 
 
 class PosEmbedding(nn.Module):
-    def __init__(self, patch_size: int = 16, emb_size: int = 768, img_size: int = 224):
+    def __init__(self):
         super().__init__()
         positions = torch.rand(max_num, 2048).cuda()
         # for ind, i in enumerate (positions):

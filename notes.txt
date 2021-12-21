@@ -16,3 +16,8 @@ Random notes:
 3. Positional embeddings added at each encoder layers? 
 4. Auxiliary loss at each layer of transformer encoder?
 5. # Replace the current transformer with DETR version with minor adaptive customization.
+
+Co-salienct object bbox classifier hyperparameters:
+1. image group size
+2. batch norm after box features before transformer
+3. /i or not /i in positional embeddings

@@ -11,60 +11,54 @@ from self_attention import *
 
 
 model = CoS_objects_Classifier()
-print(model)
-
+# print(model)
+model.cuda()
 
 if __name__ == '__main__':
 
     train_loader = get_loader(img_root, img_size, batch_size, gt_root, max_num=max_num, mode='train', num_thread=1,
                               pin=False)
+   
+   
+    for epoch in range(epochs):
 
-    # whole_iter_num = 0
-    # iter_num = math.ceil(len(train_loader.dataset) / batch_size)
-    # for epoch in range(epochs):
+        print('Starting epoch {}/{}----lr:{}.'.format(epoch + 1, epochs, lr))
 
-        # print('Starting epoch {}/{}.'.format(epoch + 1, epochs))
-        # print('epoch:{0}-------lr:{1}'.format(epoch + 1, lr))
+        epoch_loss = 0
+        epoch_correct_prd_num = 0.0001
+        epoch_total_objs_num = 0.0001
+        epoch_tot_p = 0.0001
+        epoch_true_p = 0.0001
+        epoch_tot_p_pred = 0.0001
+        epoch_ioa = 0
+        for i, data_batch in enumerate(train_loader): # typical total objs num: 15500, positive objs num: 7200
 
-        # epoch_total_loss = 0
-        # epoch_loss = 0
-    
-    for i, data_batch in enumerate(train_loader):
-        images = []
-        cos_imgs_set = Variable(data_batch[0].squeeze(0).cuda())
-        gts = Variable(data_batch[1].squeeze(0).cuda())
-        gt_128 = Variable(data_batch[2].squeeze(0).cuda())
-        gt_64 = Variable(data_batch[3].squeeze(0).cuda())
-        gt_32 = Variable(data_batch[4].squeeze(0).cuda())
-        # print('inputs: ', inputs, inputs.shape)
-        # print('gts: ', gts.shape)
-        # print('gt_32: ', gt_32,gt_32.shape)
+            cos_imgs_set = Variable(data_batch[0].squeeze(0).cuda())
+            gts = Variable(data_batch[1].squeeze(0).cuda())
 
-        # torch.set_printoptions(threshold = 10_000)
-        # print(gts[0][0].flatten().sum())
-        for img in cos_imgs_set:
-            images.append({"image": img, "height": img_size, "width": img_size})
+            images = []
+            for img in cos_imgs_set:
+                images.append({"image": img, "height": img_size, "width": img_size})
 
-        net = RPNet()
-        net.cuda()
-        nms_boxes,box_features,eachimg_selected_box_nums,activation = net(images)
-        # print(box_features,eachimg_selected_box_nums,activation)
+            nms_boxes,pred_vector = model(images)  
+            # print(pred_vector,pred_vector.shape)
+            
+            boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts),[])
 
-        # Norm the object embedding by num of objs in each img
-        # for i in range(len(box_features)):
-        #     box_features[i] = box_features[i]/eachimg_selected_box_nums[i]
-        # att = MultiHeadAttention()
-        # att_features = obj_self_atten(box_features,eachimg_selected_box_nums,att)
-        # # print(len(box_features),len(att_features),len(eachimg_selected_box_nums),box_features[0].shape,att_features[0].shape)
-        # clsfier = CoS_Classifier()
-        # clsfier.cuda()
-        # out = clsfier(att_features)
-        boxes_to_gts_list = boxes_to_gt(nms_boxes, gts)
+            boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).long().cuda() # 2
+            
+            obj_num = len(pred_vector)
+            correct_pred,y_pred_tags = correct_pred_num(pred_vector,boxes_to_gts_list)
+            
+            print(boxes_to_gts_list, y_pred_tags )
+            _,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, pred_vector)
 
-        
-        print(boxes_to_gts_list[:3])
+            epoch_ioa+=sum(gts_pos_area).cpu().data.item()/len(gts_pos_area)
+            print(epoch_ioa)
+
+            break
+        # epoch_ioa = epoch_ioa/len(train_loader)
+
+        print('epoch loss: {0:.4f} --- acc: {1:.3f} --- recall: {2:.3f} --- precision: {3:.3f} --- avg.ioa: {4:.3f}'.format(
+            epoch_loss,  epoch_correct_prd_num/epoch_total_objs_num,epoch_true_p/epoch_tot_p,epoch_true_p/epoch_tot_p_pred,epoch_ioa))
         break
-    # gt = gt_32[0][0]
-    # torch.set_printoptions(threshold = 10_000)
-    # print(gt)
-

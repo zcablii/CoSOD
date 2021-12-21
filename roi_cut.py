@@ -6,16 +6,11 @@ import torch.nn as nn
 # for ind, i in enumerate (pos_e):
 #     pos_e[ind][ind] = 1
 # pos_e.reqires_grad = True
-
-# print(pos_e)
-a = torch.rand(3,4)
-b = nn.BatchNorm1d(4)
-
-print(b(a),b(a).shape)
-a[:,2]+=2
-print(a, a.shape)
-print(b(a),b(a).shape)
-
+a = torch.Tensor([float('nan')]).cuda()
+print(a[0])
+print(torch.isnan(a[0]))
+if torch.isnan(a[0]):
+    print('sdf')
 
 # a = torch.Tensor([[float('nan'),float('nan')]])
 # print(math.isnan(a[0][0]))

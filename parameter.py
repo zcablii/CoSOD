@@ -7,6 +7,7 @@ draw_box = True # draw rp results
 root_path = '../CoSOD/'
 load_model = root_path+'pretrained_models/vgg16_20M.caffemodel.pth'
 # Your path for COCO9213
+pretrained_detection_models_path = root_path+'models/'
 img_root_coco = root_path+'Data/COCO9213-os/img/'
 gt_root_coco = root_path+'Data/COCO9213-os/gt/'
 # Your path for DUTS Class
@@ -30,10 +31,10 @@ dec_channels = 64
 img_size = 256
 scale_size = 288
 batch_size = 1
-lr = 0.01
+lr = 0.0002
 epochs = 600
 train_steps = 40000
-lr_decay_gamma = 0.1
+lr_decay_gamma = 0.5
 stepvalue1 = 20000
 stepvalue2 = 30000
 loss_weights = [1, 0.8, 0.8, 0.5, 0.5, 0.5]

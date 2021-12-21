@@ -8,8 +8,7 @@ from dataset import get_loader
 import math
 from parameter import *
 from self_attention import *
-
-
+import parameter
 def save_loss(save_dir, whole_iter_num, epoch_total_loss, epoch_loss, epoch):
     fh = open(save_dir, 'a')
     epoch_total_loss = str(epoch_total_loss)
@@ -44,14 +43,14 @@ def train_net(model):
 
     train_loader = get_loader(img_root, img_size, batch_size, gt_root, max_num=max_num, mode='train', num_thread=1,
                               pin=False)
-    lr = 0.0002
+
     print('''
     Starting training:
         Train steps: {}
         Batch size: {}
         Learning rate: {}
         Training size: {}
-    '''.format(train_steps, batch_size, lr, len(train_loader.dataset)))
+    '''.format(train_steps, batch_size, parameter.lr, len(train_loader.dataset)))
 
     N_train = len(train_loader) * batch_size
 
@@ -60,7 +59,7 @@ def train_net(model):
 
     # criterion = nn.BCEWithLogitsLoss() # 1
     criterion = nn.CrossEntropyLoss(torch.Tensor([0.45,0.55]).cuda()) # 2
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=0.0001) #86,109,998 parameters
+    optimizer = optim.Adam(model.parameters(), lr=parameter.lr, weight_decay=0.0001) #86,109,998 parameters
 
     def print_paras(model):
         for p in model.parameters():
@@ -74,7 +73,7 @@ def train_net(model):
     # epochs = 2
     for epoch in range(epochs):
 
-        print('Starting epoch {}/{}----lr:{}.'.format(epoch + 1, epochs, lr))
+        print('Starting epoch {}/{}----lr:{}.'.format(epoch + 1, epochs, parameter.lr))
 
         epoch_loss = 0
         epoch_correct_prd_num = 0.0001
@@ -82,9 +81,11 @@ def train_net(model):
         epoch_tot_p = 0.0001
         epoch_true_p = 0.0001
         epoch_tot_p_pred = 0.0001
+        epoch_ioa = 0
         for i, data_batch in enumerate(train_loader): # typical total objs num: 15500, positive objs num: 7200
             if (i + 1) > iter_num: break
-
+            if whole_iter_num%200==0: parameter.draw_box = True
+            else: parameter.draw_box = False
             cos_imgs_set = Variable(data_batch[0].squeeze(0).cuda())
             gts = Variable(data_batch[1].squeeze(0).cuda())
             gt_128 = Variable(data_batch[2].squeeze(0).cuda())
@@ -123,24 +124,23 @@ def train_net(model):
             epoch_tot_p+=boxes_to_gts_list.sum().cpu().data.item()
             true_p_list = (correct_pred + boxes_to_gts_list>1).float() # ture positive indexes are flagged as 1
             epoch_true_p+=true_p_list.sum().cpu().data.item()
-            # print(cls_loss)
-            # print(epoch_correct_prd_num,epoch_total_objs_num,epoch_true_p)
-            if epoch == 400 and i%100==0:
-                print(pred_vector)
-                print(boxes_to_gts_list)
-                print(y_pred_tags)
-            
-        epoch_loss = epoch_loss/len(train_loader)
-        # print("epoch  loss: ",epoch_loss,"total_obj_num: ",epoch_total_objs_num,"tot_positive_objs_num: ",epoch_tot_p,"acc: ",epoch_correct_prd_num/epoch_total_objs_num,'%',
-        #     "recall: ", epoch_true_p/epoch_tot_p, "precision",epoch_true_p/epoch_tot_p_pred
-        #         )
+            _,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, pred_vector)
 
-        print('epoch loss: {0:.4f} --- acc: {1:.3f} --- recall: {2:.3f} --- precision: {3:.3f}'.format(
-            epoch_loss,  epoch_correct_prd_num/epoch_total_objs_num,epoch_true_p/epoch_tot_p,epoch_true_p/epoch_tot_p_pred))
+            epoch_ioa+=sum(gts_pos_area).cpu().data.item()/len(gts_pos_area)
+            whole_iter_num+=1
+            # if np.isnan(epoch_ioa):
+            #     print(gts_pos_area)
+            #     break
+        epoch_loss = epoch_loss/len(train_loader)
+        epoch_ioa = epoch_ioa/len(train_loader)
+
+
+        print('epoch loss: {0:.4f} --- acc: {1:.3f} --- recall: {2:.3f} --- precision: {3:.3f} --- avg.ioa: {4:.3f}'.format(
+            epoch_loss,  epoch_correct_prd_num/epoch_total_objs_num,epoch_true_p/epoch_tot_p,epoch_true_p/epoch_tot_p_pred,epoch_ioa))
 
         if (epoch+1) % 50==0:
-            lr = lr*0.5
-            optimizer = adjust_learning_rate(optimizer, decay_rate=0.2)
+            parameter.lr = parameter.lr*lr_decay_gamma
+            optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
         
         # if epoch ==4:
         #     break
