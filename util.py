@@ -175,7 +175,8 @@ def boxes_gt_ioa(imgs_boxes, gts_, pred_vector):
     gts = gts_.clone() #size: [8, 1, 256, 256] 8 is image num
     pos_imgs_boxes = []
     gts_pos_area = []
-    y_pred_tags = torch.sigmoid(pred_vector).flatten()
+    y_pred_prb = torch.sigmoid(pred_vector).flatten()
+    y_pred_tags = torch.round(y_pred_prb)
     boxes_ind = 0
 
     for (boxes, gt_) in zip(imgs_boxes, gts):
@@ -184,29 +185,34 @@ def boxes_gt_ioa(imgs_boxes, gts_, pred_vector):
         gt_area = gt.flatten().sum()
         pos_boxes = []
         gt_pos_area = 0
+        temp_box = boxes[0].tensor[0].round().int()
         temp_max_prob_box = boxes_ind
         for box in boxes:
-            if y_pred_tags[boxes_ind]>y_pred_tags[temp_max_prob_box]:
+            box = box.round().int()
+
+            if y_pred_prb[boxes_ind]>y_pred_prb[temp_max_prob_box]:
+                temp_box = box
                 temp_max_prob_box = boxes_ind
             if y_pred_tags[boxes_ind] == 0:
                 boxes_ind+=1
                 continue
       
-            box = box.round().int()
             [x1,y1,x2,y2] = box
             box_cut_gt = gt[y1:y2+1,x1:x2+1]
             box_gt_area = box_cut_gt.flatten().sum()
             gt[y1:y2+1,x1:x2+1] = gt[y1:y2+1,x1:x2+1]*0
             gt_pos_area+=box_gt_area
+         
             pos_boxes.append(box)
             boxes_ind+=1
         if len(pos_boxes)==0:
-            pos_boxes.append(boxes[temp_max_prob_box].round().int())
-
-        gts_pos_area.append(gt_pos_area/gt_area)
+            pos_boxes.append(temp_box)
+        if gt_area <= 0:
+            gts_pos_area.append(0)
+        else:
+            gts_pos_area.append(gt_pos_area/gt_area)
         pos_imgs_boxes.append(pos_boxes)
 
-    
     if parameter.draw_box:
         draw_gt_with_RPboxes(pos_imgs_boxes, gts_, name = 'pred')
     return pos_imgs_boxes,gts_pos_area
