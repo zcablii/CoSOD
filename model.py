@@ -54,10 +54,9 @@ class RPNet(nn.Module):
             return hook
 
         activation = {}
-        self.model.backbone.stem.register_forward_hook(get_activation('stem')) 
-        self.model.backbone.res2.register_forward_hook(get_activation('res2')) 
-        self.model.backbone.res3.register_forward_hook(get_activation('res3')) 
-        self.model.backbone.res4.register_forward_hook(get_activation('res4')) 
+        self.model.backbone.res2.register_forward_hook(get_activation('res2')) #torch.Size([8, 256, 64, 64])
+        self.model.backbone.res3.register_forward_hook(get_activation('res3')) #torch.Size([8, 512, 32, 32])
+        self.model.backbone.res4.register_forward_hook(get_activation('res4')) #torch.Size([8, 1024, 16, 16])
 
         if self.mode=='train':
             self.model.eval()
@@ -219,80 +218,73 @@ class TransformerEncoderBlock(nn.Sequential):
             )
             ))
 
-class TransformerEncoderBlock_init(nn.Sequential):
-    def __init__(self,
-                 emb_size: int = 2048,
-                 drop_p: float = 0.,
-                 forward_expansion: int = 4,
-                 forward_drop_p: float = 0.,
-                 ** kwargs):
-        super().__init__(
-            ResidualAdd(nn.Sequential(
-                MultiHeadAttention(emb_size, **kwargs),
-                nn.Dropout(drop_p)
-            )),
-            ResidualAdd(nn.Sequential(
-                nn.LayerNorm(emb_size),
-                FeedForwardBlock(
-                    emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
-                nn.Dropout(drop_p)
-            )
-            ))
-
 class TransformerEncoder(nn.Sequential):
     def __init__(self, depth: int = 12, **kwargs):
         super().__init__(*[TransformerEncoderBlock(**kwargs) for _ in range(depth)])
 
 
 
-# class CoS_objects_Classifier(nn.Module):
-#     def __init__(self):
-#         super(CoS_objects_Classifier, self).__init__()
-#         self.det_net = RPNet()
-#         # self.att = MultiHeadAttention(2048,1)
-#         self.encoder_layer = nn.TransformerEncoderLayer(d_model=2048,nhead=4)
-#         self.trans_encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=4)
-#         self.pos_e = torch.rand(max_num, 2048).cuda()
-#         for ind, i in enumerate (self.pos_e):
-#             self.pos_e[ind][ind] = 1
-#         self.pos_e.reqires_grad = True
+class FPN(nn.Module):
+    def __init__(self):
+        super(FPN, self).__init__()
+        self.in_planes = 64
 
-#         self.classifier = nn.Sequential(
-#             nn.Linear(2048, 2048),
-#             nn.ReLU(True),
-#             nn.Dropout(),
-#             nn.Linear(2048, 1024),
-#             nn.ReLU(True),
-#             nn.Dropout(),
-#             nn.Linear(1024, 2),
-#         )
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
 
-#     def forward(self, images):
-#         nms_boxes,box_features,eachimg_selected_box_nums,activation = self.det_net(images)
-#             # print(box_features,eachimg_selected_box_nums,activation)
-
-#             # Norm the object embedding by num of objs in each img and add positional embeddings
-#         inds = 0
-#         for ind, i in enumerate (eachimg_selected_box_nums):
-#             box_features[inds:i+inds] = box_features[inds:i+inds] / i + self.pos_e[ind]
-#             inds+=i
-#         # att_features = obj_self_atten(box_features,eachimg_selected_box_nums,self.att)
+        # Bottom-up layers
         
-#         att_features = self.trans_encoder(box_features.reshape(1,-1,2048)).reshape(-1,2048)
-#         # print(len(box_features),len(att_features),len(eachimg_selected_box_nums),box_features[0].shape,att_features[0].shape)
+        # Top layer
+        self.toplayer = nn.Conv2d(1024, 256, kernel_size=1, stride=1, padding=0)  # Reduce channels
 
-#         pred_vector = self.classifier(att_features)
-#         if math.isnan(pred_vector[0][0]):
-#             print(box_features)
-#             print(att_features)
-#         return nms_boxes,pred_vector
+        # Smooth layers
+        self.smooth1 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.smooth2 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+        self.smooth3 = nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1)
+
+        # Lateral layers
+        self.latlayer1 = nn.Conv2d( 512, 256, kernel_size=1, stride=1, padding=0)
+        self.latlayer2 = nn.Conv2d( 256, 256, kernel_size=1, stride=1, padding=0)
+
+    def _upsample_add(self, x, y):
+       
+        _,_,H,W = y.size()
+        return F.upsample(x, size=(H,W), mode='bilinear') + y
+
+    def forward(self, layers):
+        # Bottom-up
+        c2 = layers['res2'] #torch.Size([8, 256, 64, 64])
+        c3 = layers['res3'] #torch.Size([8, 512, 32, 32])
+        c4 = layers['res4'] #torch.Size([8, 1024, 16, 16])
+
+        # Top-down
+        p4 = self.toplayer(c4) # torch.Size([8, 256, 16, 16]) 
+        p3 = self._upsample_add(p4, self.latlayer1(c3))
+        p2 = self._upsample_add(p3, self.latlayer2(c2))
+        # Smooth
+        p4 = self.smooth1(p4)
+        p3 = self.smooth2(p3)
+        p2 = self.smooth3(p2)
+        return p2, p3, p4
+
+class ScoreLayer(nn.Module):
+    def __init__(self, k):
+        super(ScoreLayer, self).__init__()
+        self.score = nn.Conv2d(k ,1, 3, 1, 1)
+
+    def forward(self, x, x_size=None):
+        x = self.score(x)
+        if x_size is not None:
+            x = F.interpolate(x, x_size, mode='bilinear', align_corners=True)
+        return x
+
+
 
 class CoS_objects_Classifier(nn.Module):
     def __init__(self):
         super(CoS_objects_Classifier, self).__init__()
         self.det_net = RPNet()
         self.trans_encoder = TransformerEncoder(depth=8)
-        self.trans_encoder_init = TransformerEncoderBlock_init()
         self.pos_e = PosEmbedding()
         self.classifier = nn.Sequential(
             nn.Linear(2048, 2048),
@@ -303,7 +295,7 @@ class CoS_objects_Classifier(nn.Module):
             nn.ReLU(True),
             nn.BatchNorm1d(1024),
             nn.Dropout(),
-            nn.Linear(1024, 2),
+            nn.Linear(1024, 1),
         )
         self.layerNorm = nn.BatchNorm1d(2048)
 
@@ -326,8 +318,46 @@ class CoS_objects_Classifier(nn.Module):
         return nms_boxes,pred_vector
 
 
-# PosEmbedding()(x).shape   # torch.Size([1, 197, 768])
-# patches_embedded = PosEmbedding()(x)
-# MultiHeadAttention()(patches_embedded).shape
-# TransformerEncoderBlock()(patches_embedded).shape
-# TransformerEncoder()(patches_embedded).shape
+
+
+class CoS_Det_Net(nn.Module):
+    def __init__(self):
+        super(CoS_Det_Net, self).__init__()
+        self.det_net = RPNet()
+        self.trans_encoder = TransformerEncoder(depth=8)
+        self.pos_e = PosEmbedding()
+        self.fpn = FPN()
+        self.score_Layer = ScoreLayer(256)
+        self.classifier = nn.Sequential(
+            nn.Linear(2048, 2048),
+            nn.ReLU(True),
+            nn.BatchNorm1d(2048),
+            nn.Dropout(),
+            nn.Linear(2048, 1024),
+            nn.ReLU(True),
+            nn.BatchNorm1d(1024),
+            nn.Dropout(),
+            nn.Linear(1024, 1),
+        )
+        self.layerNorm = nn.BatchNorm1d(2048)
+
+    def forward(self, images):
+        nms_boxes,box_features,eachimg_selected_box_nums,activation = self.det_net(images)
+        # box_features = self.layerNorm(box_features)
+        
+        box_features = self.pos_e(eachimg_selected_box_nums,box_features)
+        # box_features = self.trans_encoder_init(box_features.reshape(1,-1,2048))
+        att_features = self.trans_encoder(box_features.reshape(1,-1,2048)).reshape(-1,2048)
+        # print(len(box_features),len(att_features),len(eachimg_selected_box_nums),box_features[0].shape,att_features[0].shape)
+        # print(att_features,att_features.shape)
+        pred_vector = self.classifier(att_features)
+        if math.isnan(pred_vector[0][0]):
+            print("box_features: ",box_features)
+            print("att_features: ",att_features)
+            print("nan, value exploded")
+            assert False
+            #"if appears nan, try to set a smaller lr"
+        (p2, p3, p4) = self.fpn(activation)
+        res2 = self.score_Layer(p2,[256,256])
+
+        return nms_boxes,pred_vector,res2

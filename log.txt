@@ -5,84 +5,12 @@
         Learning rate: 0.0002
         Training size: 291
     
-Starting epoch 1/600----lr:0.0002.
-epoch loss: 0.6416 --- acc: 0.684 --- recall: 0.693 --- precision: 0.679 --- avg.ioa: 0.782
-Starting epoch 2/600----lr:0.0002.
-epoch loss: 0.5917 --- acc: 0.712 --- recall: 0.719 --- precision: 0.698 --- avg.ioa: 0.836
-Starting epoch 3/600----lr:0.0002.
-epoch loss: 0.5777 --- acc: 0.723 --- recall: 0.731 --- precision: 0.715 --- avg.ioa: 0.839
-Starting epoch 4/600----lr:0.0002.
-epoch loss: 0.5569 --- acc: 0.739 --- recall: 0.758 --- precision: 0.713 --- avg.ioa: 0.841
-Starting epoch 5/600----lr:0.0002.
-epoch loss: 0.5605 --- acc: 0.722 --- recall: 0.736 --- precision: 0.708 --- avg.ioa: 0.831
-Starting epoch 6/600----lr:0.0002.
-epoch loss: 0.5601 --- acc: 0.733 --- recall: 0.743 --- precision: 0.719 --- avg.ioa: 0.838
-Starting epoch 7/600----lr:0.0002.
-epoch loss: 0.5420 --- acc: 0.751 --- recall: 0.753 --- precision: 0.752 --- avg.ioa: 0.845
-Starting epoch 8/600----lr:0.0002.
-epoch loss: 0.5358 --- acc: 0.750 --- recall: 0.745 --- precision: 0.736 --- avg.ioa: 0.851
-Starting epoch 9/600----lr:0.0002.
-epoch loss: 0.5400 --- acc: 0.758 --- recall: 0.748 --- precision: 0.755 --- avg.ioa: 0.839
-Starting epoch 10/600----lr:0.0002.
-epoch loss: 0.5493 --- acc: 0.749 --- recall: 0.737 --- precision: 0.743 --- avg.ioa: 0.833
-Starting epoch 11/600----lr:0.0002.
-epoch loss: 0.5307 --- acc: 0.762 --- recall: 0.757 --- precision: 0.756 --- avg.ioa: 0.851
-Starting epoch 12/600----lr:0.0002.
-epoch loss: 0.5291 --- acc: 0.764 --- recall: 0.750 --- precision: 0.768 --- avg.ioa: 0.834
-Starting epoch 13/600----lr:0.0002.
-epoch loss: 0.5326 --- acc: 0.764 --- recall: 0.756 --- precision: 0.766 --- avg.ioa: 0.849
-Starting epoch 14/600----lr:0.0002.
-epoch loss: 0.5266 --- acc: 0.760 --- recall: 0.764 --- precision: 0.756 --- avg.ioa: 0.863
-Starting epoch 15/600----lr:0.0002.
-epoch loss: 0.5193 --- acc: 0.769 --- recall: 0.761 --- precision: 0.755 --- avg.ioa: 0.840
-Starting epoch 16/600----lr:0.0002.
-epoch loss: 0.5342 --- acc: 0.767 --- recall: 0.763 --- precision: 0.753 --- avg.ioa: 0.846
-Starting epoch 17/600----lr:0.0002.
-epoch loss: 0.5173 --- acc: 0.775 --- recall: 0.766 --- precision: 0.767 --- avg.ioa: 0.839
-Starting epoch 18/600----lr:0.0002.
-epoch loss: 0.5133 --- acc: 0.784 --- recall: 0.769 --- precision: 0.780 --- avg.ioa: 0.840
-Starting epoch 19/600----lr:0.0002.
-epoch loss: 0.5113 --- acc: 0.778 --- recall: 0.762 --- precision: 0.781 --- avg.ioa: 0.848
-Starting epoch 20/600----lr:0.0002.
-epoch loss: 0.5056 --- acc: 0.777 --- recall: 0.764 --- precision: 0.782 --- avg.ioa: 0.858
-Starting epoch 21/600----lr:0.0002.
-epoch loss: 0.5191 --- acc: 0.769 --- recall: 0.767 --- precision: 0.761 --- avg.ioa: 0.842
-Starting epoch 22/600----lr:0.0002.
-epoch loss: 0.5064 --- acc: 0.781 --- recall: 0.772 --- precision: 0.775 --- avg.ioa: 0.851
-Starting epoch 23/600----lr:0.0002.
-epoch loss: 0.5079 --- acc: 0.781 --- recall: 0.777 --- precision: 0.783 --- avg.ioa: 0.852
-Starting epoch 24/600----lr:0.0002.
-epoch loss: 0.5087 --- acc: 0.779 --- recall: 0.775 --- precision: 0.776 --- avg.ioa: 0.848
-Starting epoch 25/600----lr:0.0002.
-epoch loss: 0.5131 --- acc: 0.781 --- recall: 0.773 --- precision: 0.768 --- avg.ioa: 0.847
-Starting epoch 26/600----lr:0.0002.
-epoch loss: 0.5037 --- acc: 0.785 --- recall: 0.781 --- precision: 0.782 --- avg.ioa: 0.859
-Starting epoch 27/600----lr:0.0002.
-epoch loss: 0.4949 --- acc: 0.791 --- recall: 0.791 --- precision: 0.786 --- avg.ioa: 0.849
-Starting epoch 28/600----lr:0.0002.
-epoch loss: 0.4962 --- acc: 0.787 --- recall: 0.792 --- precision: 0.776 --- avg.ioa: 0.854
-Starting epoch 29/600----lr:0.0002.
-epoch loss: 0.4956 --- acc: 0.791 --- recall: 0.789 --- precision: 0.792 --- avg.ioa: 0.868
-Starting epoch 30/600----lr:0.0002.
-epoch loss: 0.5060 --- acc: 0.785 --- recall: 0.791 --- precision: 0.776 --- avg.ioa: 0.851
-Starting epoch 31/600----lr:0.0002.
-epoch loss: 0.4819 --- acc: 0.801 --- recall: 0.810 --- precision: 0.783 --- avg.ioa: 0.871
-Starting epoch 32/600----lr:0.0002.
-epoch loss: 0.4967 --- acc: 0.797 --- recall: 0.798 --- precision: 0.793 --- avg.ioa: 0.849
-Starting epoch 33/600----lr:0.0002.
-epoch loss: 0.4884 --- acc: 0.797 --- recall: 0.795 --- precision: 0.789 --- avg.ioa: 0.849
-Starting epoch 34/600----lr:0.0002.
-epoch loss: 0.4836 --- acc: 0.796 --- recall: 0.802 --- precision: 0.792 --- avg.ioa: 0.862
-Starting epoch 35/600----lr:0.0002.
-epoch loss: 0.4857 --- acc: 0.795 --- recall: 0.808 --- precision: 0.790 --- avg.ioa: 0.864
-Starting epoch 36/600----lr:0.0002.
-epoch loss: 0.4775 --- acc: 0.802 --- recall: 0.806 --- precision: 0.775 --- avg.ioa: 0.857
-Starting epoch 37/600----lr:0.0002.
-epoch loss: 0.4782 --- acc: 0.804 --- recall: 0.799 --- precision: 0.794 --- avg.ioa: 0.862
-Starting epoch 38/600----lr:0.0002.
-epoch loss: 0.4893 --- acc: 0.798 --- recall: 0.814 --- precision: 0.788 --- avg.ioa: 0.852
-Starting epoch 39/600----lr:0.0002.
-epoch loss: 0.4733 --- acc: 0.806 --- recall: 0.819 --- precision: 0.795 --- avg.ioa: 0.865
-Starting epoch 40/600----lr:0.0002.
-epoch loss: 0.4847 --- acc: 0.803 --- recall: 0.802 --- precision: 0.798 --- avg.ioa: 0.853
-Starting epoch 41/600----lr:0.0002.
+Starting epoch 1/300----lr:0.0002.
+epoch class loss: 0.7342 --- acc: 0.535 --- recall: 0.487 --- precision: 0.523 --- avg.ioa: 0.569 --- seg loss: 0.636 
+Starting epoch 2/300----lr:0.0002.
+epoch class loss: 0.6121 --- acc: 0.671 --- recall: 0.623 --- precision: 0.679 --- avg.ioa: 0.766 --- seg loss: 0.606 
+Starting epoch 3/300----lr:0.0002.
+epoch class loss: 0.5783 --- acc: 0.734 --- recall: 0.707 --- precision: 0.720 --- avg.ioa: 0.811 --- seg loss: 0.600 
+Starting epoch 4/300----lr:0.0002.
+epoch class loss: 0.5580 --- acc: 0.746 --- recall: 0.711 --- precision: 0.759 --- avg.ioa: 0.822 --- seg loss: 0.589 
+Starting epoch 5/300----lr:0.0002.

@@ -27,12 +27,13 @@ if not os.path.exists(save_model_dir):
 gpu_id = "0"
 max_num = 8
 dec_channels = 64
+box_feat_dim = 1024
 
 img_size = 256
 scale_size = 288
 batch_size = 1
 lr = 0.0002
-epochs = 600
+epochs = 300
 train_steps = 40000
 lr_decay_gamma = 0.5
 stepvalue1 = 20000

@@ -2,22 +2,29 @@ https://detectron2.readthedocs.io/tutorials/install.html
 CUDA_VERSION = torch.__version__.split("+")[-1] 
 pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cu113/torch1.10/index.html# replace cu113 with CUDA_VERSION
 
-1. 
-2. # loss function gives more weights to positive loss. (pos:neg = 0.55:0.45)
-3. Finalise train.py: a tidy style, save&load checkpoint pkl, log file... 
-4. Add eval 
-5. Fine tune
+Code phase 1: Regin proposal, object level self-attention, bbox classification
+
+1. # loss function gives more weights to positive loss. (pos:neg = 0.55:0.45) # √
+2. Finalise train.py: a tidy style, save&load checkpoint pkl, log file... 
+3. Add eval 
 
 
+Fine tune Co-salienct object bbox classifier hyperparameters:
 
-Random notes:
-
-
-3. Positional embeddings added at each encoder layers? 
-4. Auxiliary loss at each layer of transformer encoder?
-5. # Replace the current transformer with DETR version with minor adaptive customization.
-
-Co-salienct object bbox classifier hyperparameters:
 1. image group size
 2. batch norm after box features before transformer
 3. /i or not /i in positional embeddings
+4. Pretrained model: try Res101FPN # not now
+5. Positional embeddings added at each encoder layers
+6. Auxiliary loss at each layer of transformer encoder
+7. # Replace the current transformer with DETR version with minor adaptive customization. # ignore this for now
+
+
+Code phase 2: Co-sal binary map segmentation from selected bbox.
+1. Train from gt bboxes.
+2. Think about Saliency models
+
+Code phase 3: Join training & inference
+1. Join training bbox classifier and co-sal binary mask head.
+2. Try some pre/post-processing, e.g. Saliency detection pre-processing, Dense-CRF post-processing
+3. Inference!

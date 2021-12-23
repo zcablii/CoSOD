@@ -10,7 +10,13 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import torch.nn.functional as F
 from detectron2.structures import Boxes
-import parameter
+# t = Boxes( torch.Tensor([[0, 0, 10, 10],
+#                     [3, 13, 20, 20],
+#                     [12, 5, 30, 18],
+#                     [4, 15, 10, 19],
+#                     [18, 8, 25, 14]
+#                     ])
+#          )
 
    
 def obj_self_atten(box_features,eachimg_selected_box_nums,model):
@@ -134,7 +140,7 @@ def roi_cut(feature_map_,img_boxes,order):
 def roi_cut_boxes_to_gt(imgs_boxes, gts_):
     boxes_to_gts_list = []
     gts = gts_.clone() #size: [8, 1, 256, 256] 8 is image num
-    if parameter.draw_box:
+    if draw_box:
         draw_gt_with_RPboxes(imgs_boxes, gts)
 
     for (boxes, gt_) in zip(imgs_boxes, gts):
@@ -171,7 +177,7 @@ def roi_cut_boxes_to_gt(imgs_boxes, gts_):
 def boxes_to_gt(imgs_boxes, gts_):
     boxes_to_gts_list = []
     gts = gts_.clone() #size: [8, 1, 256, 256] 8 is image num
-    if parameter.draw_box:
+    if draw_box:
         draw_gt_with_RPboxes(imgs_boxes, gts)
     for (boxes, gt_) in zip(imgs_boxes, gts):
         gt = gt_[0]
@@ -215,17 +221,14 @@ def boxes_gt_ioa(imgs_boxes, gts_, pred_vector):
         gt_area = gt.flatten().sum()
         pos_boxes = []
         gt_pos_area = 0
-        temp_max_prob_box_ind = boxes_ind
-        temp_max_prob_box = boxes[0].tensor[0]
+        temp_max_prob_box = boxes_ind
         for box in boxes:
-            if y_pred_softmax[boxes_ind,1]>y_pred_softmax[temp_max_prob_box_ind,1]:
-                temp_max_prob_box_ind = boxes_ind
-                temp_max_prob_box = box
+            if y_pred_softmax[boxes_ind,1]>y_pred_softmax[temp_max_prob_box,1]:
+                temp_max_prob_box = boxes_ind
             if y_pred_tags[boxes_ind] == 0:
                 boxes_ind+=1
                 continue
-            if gt_area<=0:
-                gt_area = 1
+      
             box = box.round().int()
             [x1,y1,x2,y2] = box
             box_cut_gt = gt[y1:y2+1,x1:x2+1]
@@ -234,14 +237,14 @@ def boxes_gt_ioa(imgs_boxes, gts_, pred_vector):
             gt_pos_area+=box_gt_area
             pos_boxes.append(box)
             boxes_ind+=1
-        if len(pos_boxes)==0:
-            pos_boxes.append(temp_max_prob_box)
+        if len(pos_boxes==0):
+            pos_boxes.append(boxes[temp_max_prob_box])
 
-        if torch.isnan(gt_pos_area/gt_area):
-            print("gt_pos_area, gt_area",gt_pos_area, gt_area)
         gts_pos_area.append(gt_pos_area/gt_area)
         pos_imgs_boxes.append(pos_boxes)
 
-    if parameter.draw_box:
-        draw_gt_with_RPboxes(pos_imgs_boxes, gts_, name = 'pred')
+    assert len(y_pred_tags) == len(imgs_boxes)
+    pos_imgs_boxes = Boxes(torch.Tensor(pos_imgs_boxes))
+    if draw_box:
+        draw_gt_with_RPboxes(pos_imgs_boxes, gts, name = 'pred')
     return pos_imgs_boxes,gts_pos_area
