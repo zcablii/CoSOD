@@ -271,9 +271,10 @@ class FPN(nn.Module):
 class ScoreLayer(nn.Module):
     def __init__(self, k):
         super(ScoreLayer, self).__init__()
-        self.bot_layer = nn.Conv2d(k ,3, 1, 1, 0)
-        self.score = nn.Conv2d(6, 1, 3, 1, 1)
-        self.smooth = nn.Conv2d(6, 6, kernel_size=7, stride=1, padding=3)
+        feature_channels = 64
+        self.bot_layer = nn.Conv2d(k ,feature_channels, 1, 1, 0)
+        self.score = nn.Conv2d(feature_channels+3, 1, 3, 1, 1)
+        self.smooth = nn.Conv2d(feature_channels+3, feature_channels+3, kernel_size=5, stride=1, padding=2)
     def _upsample_cat(self, x, y):
        
         _,_,H,W = y.size()
@@ -284,7 +285,6 @@ class ScoreLayer(nn.Module):
         _,_,H,W = rgb.size()
         rgb = F.upsample(rgb, size=(H//2,W//2), mode='bilinear')
         x = self.smooth(self._upsample_cat(x,rgb))
-        assert x.shape[1] == 6
         x = self.score(x)
         if x_size is not None:
             x = F.interpolate(x, x_size, mode='bilinear', align_corners=True)
