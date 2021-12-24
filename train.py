@@ -313,7 +313,6 @@ def train_joint(model):
         if (epoch+1) % 50==0:
             parameter.lr = parameter.lr*lr_decay_gamma
             optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
-        break
     crt_time = datetime.datetime.now()
     torch.save(model.state_dict(), save_model_dir +str(crt_time.month)+'-'+str(crt_time.day)+'-'+str(crt_time.hour)
                     + 'joint_epochs{}.pth'.format(epochs))
