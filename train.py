@@ -125,7 +125,7 @@ def train_classifier(model):
             epoch_tot_p+=boxes_to_gts_list.sum().cpu().data.item()
             true_p_list = (correct_pred + boxes_to_gts_list>1).float() # ture positive indexes are flagged as 1
             epoch_true_p+=true_p_list.sum().cpu().data.item()
-            _,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, pred_vector)
+            _,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, pred_vector,False)
 
             epoch_ioa+=sum(gts_pos_area).cpu().data.item()/len(gts_pos_area)
             whole_iter_num+=1
@@ -189,7 +189,7 @@ def train_seg(model):
             nms_boxes,_,output_binary = model(images)  
             boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts),[])
             boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).long() # 2
-            pos_imgs_boxes,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, boxes_to_gts_list)
+            pos_imgs_boxes,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, boxes_to_gts_list,False)
 
             output_binary = binary_after_boxes(output_binary, pos_imgs_boxes)
 
@@ -271,7 +271,7 @@ def train_joint(model):
             boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts),[])
             boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).float().cuda() # 1
             
-            pos_imgs_boxes,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, pred_vector)
+            pos_imgs_boxes,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, pred_vector,False)
 
             output_binary = binary_after_boxes(output_binary, pos_imgs_boxes)
 
@@ -316,8 +316,6 @@ def train_joint(model):
     crt_time = datetime.datetime.now()
     torch.save(model.state_dict(), save_model_dir +str(crt_time.month)+'-'+str(crt_time.day)+'-'+str(crt_time.hour)
                     + 'joint_epochs{}.pth'.format(epochs))
-
-
 
 
 if __name__ == '__main__':
