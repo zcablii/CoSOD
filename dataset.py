@@ -157,9 +157,9 @@ class CoData_Train(data.Dataset):
                 new_gt = new_gt.crop((x1, y1, x1 + img_size, y1 + img_size))
 
             # random flip
-            # if random.random() < 0.5:
-            #     new_img = new_img.transpose(Image.FLIP_LEFT_RIGHT)
-            #     new_gt = new_gt.transpose(Image.FLIP_LEFT_RIGHT)
+            if random.random() < 0.5:
+                new_img = new_img.transpose(Image.FLIP_LEFT_RIGHT)
+                new_gt = new_gt.transpose(Image.FLIP_LEFT_RIGHT)
 
             new_img = self.transform(new_img)
             gt_256 = self.t_transform(new_gt)

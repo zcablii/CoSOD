@@ -9,6 +9,7 @@ import math
 from parameter import *
 from self_attention import *
 import parameter
+import datetime
 def save_loss(save_dir, whole_iter_num, epoch_total_loss, epoch_loss, epoch):
     fh = open(save_dir, 'a')
     epoch_total_loss = str(epoch_total_loss)
@@ -28,7 +29,6 @@ def adjust_learning_rate(optimizer, decay_rate=.1):
         param_group['lr'] = param_group['lr'] * decay_rate
         print('after lr: ', param_group['lr'])
     return optimizer
-
 
 def save_lr(save_dir, optimizer):
     update_lr_group = optimizer.param_groups[0]
@@ -70,7 +70,7 @@ def train_classifier(model):
     
     whole_iter_num = 0
     iter_num = math.ceil(len(train_loader.dataset) / batch_size)
-    # epochs = 2
+  
     for epoch in range(epochs):
 
         print('Starting epoch {}/{}----lr:{}.'.format(epoch + 1, epochs, parameter.lr))
@@ -143,6 +143,8 @@ def train_classifier(model):
             parameter.lr = parameter.lr*lr_decay_gamma
             optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
         
+        
+    torch.save(model.state_dict(), save_model_dir + 'cls_epochs{}.pth'.format(epochs))
 
 
 def train_seg(model):
@@ -209,7 +211,8 @@ def train_seg(model):
         if (epoch+1) % 50==0:
             parameter.lr = parameter.lr*lr_decay_gamma
             optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
-        
+    torch.save(model.state_dict(), save_model_dir + 'seg_epochs{}.pth'.format(epochs))
+
 
 
 
@@ -260,7 +263,7 @@ def train_joint(model):
             images = []
             for img in cos_imgs_set:
                 images.append({"image": img, "height": img_size, "width": img_size})
-
+            
             optimizer.zero_grad()
             nms_boxes,pred_vector,output_binary = model(images)  
             
@@ -298,7 +301,7 @@ def train_joint(model):
 
             epoch_ioa+=sum(gts_pos_area).cpu().data.item()/len(gts_pos_area)
             whole_iter_num+=1
-         
+        
         epoch_cls_loss = epoch_cls_loss/len(train_loader)
         epoch_seg_loss = epoch_seg_loss/len(train_loader)
         epoch_ioa = epoch_ioa/len(train_loader)
@@ -310,7 +313,11 @@ def train_joint(model):
         if (epoch+1) % 50==0:
             parameter.lr = parameter.lr*lr_decay_gamma
             optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
-        
+        break
+    crt_time = datetime.datetime.now()
+    torch.save(model.state_dict(), save_model_dir +str(crt_time.month)+'-'+str(crt_time.day)+'-'+str(crt_time.hour)
+                    + 'joint_epochs{}.pth'.format(epochs))
+
 
 
 

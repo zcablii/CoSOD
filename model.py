@@ -58,39 +58,40 @@ class RPNet(nn.Module):
         self.model.backbone.res3.register_forward_hook(get_activation('res3')) #torch.Size([8, 512, 32, 32])
         self.model.backbone.res4.register_forward_hook(get_activation('res4')) #torch.Size([8, 1024, 16, 16])
 
-        if self.mode=='train':
-            self.model.eval()
-            with torch.no_grad():
-                images = self.model.preprocess_image(image_Input)  # don't forget to preprocess
-                features = self.model.backbone(images.tensor)  # cnn features res4 features['res4']: [n,1024,h,w]
-                proposals, _ = self.model.proposal_generator(images, features, None)  # RPN  proposals[0].proposal_boxes are Boxes
-                features_ = [features[f] for f in self.model.roi_heads.in_features] #[tensor [n,1024,h,w]]
+        
+        self.model.eval()
+        with torch.no_grad():
+            images = self.model.preprocess_image(image_Input)  # don't forget to preprocess
+            features = self.model.backbone(images.tensor)  # cnn features res4 features['res4']: [n,1024,h,w]
+            proposals, _ = self.model.proposal_generator(images, features, None)  # RPN  proposals[0].proposal_boxes are Boxes
+            features_ = [features[f] for f in self.model.roi_heads.in_features] #[tensor [n,1024,h,w]]
 
-                # Apply NMS on proposed boxes, select 3 to 30 boxes
-                proposals_objectness_logits = filter_boxes_by_prob([x.objectness_logits for x in proposals])
-                selected_box_num = [len(i) for i in proposals_objectness_logits]
-                proposals_boxes = [x.proposal_boxes[:i] for x,i in zip(proposals,selected_box_num)]
-            
-                nms_boxes_inds = [nms(proposals_box.tensor, proposals_objectness_logit, 0.3) for (proposals_box,proposals_objectness_logit) in zip(proposals_boxes,proposals_objectness_logits)]
+            # Apply NMS on proposed boxes, select 3 to 30 boxes
+            proposals_objectness_logits = filter_boxes_by_prob([x.objectness_logits for x in proposals])
+            selected_box_num = [len(i) for i in proposals_objectness_logits]
+            proposals_boxes = [x.proposal_boxes[:i] for x,i in zip(proposals,selected_box_num)]
+        
+            nms_boxes_inds = [nms(proposals_box.tensor, proposals_objectness_logit, 0.3) for (proposals_box,proposals_objectness_logit) in zip(proposals_boxes,proposals_objectness_logits)]
 
 
-                nms_boxes_ = [[proposals_boxes[i].tensor[index] for index in nms_boxes_ind] for i,nms_boxes_ind in enumerate(nms_boxes_inds) ]
-                nms_boxes = [Boxes(torch.cat(nms_boxes_[i]).reshape(-1,4)) for i in range(len(nms_boxes_))] 
-                eachimg_selected_box_nums = [len(boxes) for boxes in nms_boxes]# keep this list for box-image relation 
+            nms_boxes_ = [[proposals_boxes[i].tensor[index] for index in nms_boxes_ind] for i,nms_boxes_ind in enumerate(nms_boxes_inds) ]
+            nms_boxes = [Boxes(torch.cat(nms_boxes_[i]).reshape(-1,4)) for i in range(len(nms_boxes_))] 
+            eachimg_selected_box_nums = [len(boxes) for boxes in nms_boxes]# keep this list for box-image relation 
 
-                # box_features_ = []
-                # for (img_boxes,feature_map) in zip(nms_boxes,features['res4']):
-                #     order = sort_boxes(img_boxes)
-                #     each_img_boxes_features = roi_cut(feature_map,img_boxes,order) # implement roi cut!
-                #     box_features_.append(each_img_boxes_features)
-                # box_features_=torch.cat(box_features_)
-                if parameter.draw_box:
-                    write_boxes_imgs(nms_boxes,image_Input)
+            # box_features_ = []
+            # for (img_boxes,feature_map) in zip(nms_boxes,features['res4']):
+            #     order = sort_boxes(img_boxes)
+            #     each_img_boxes_features = roi_cut(feature_map,img_boxes,order) # implement roi cut!
+            #     box_features_.append(each_img_boxes_features)
+            # box_features_=torch.cat(box_features_)
+            if parameter.draw_box:
+                write_boxes_imgs(nms_boxes,image_Input)
 
-                box_features_ = self.model.roi_heads.pooler(features_, nms_boxes) #  [n,1024,14,14] pooler.py line ~220
+            box_features_ = self.model.roi_heads.pooler(features_, nms_boxes) #  [n,1024,14,14] pooler.py line ~220
+        if self.mode=='train':    
             self.model.train()  
-            box_features = self.model.roi_heads.res5(box_features_)  # features of all 1k candidates [n*1000, 2048,7,7]
-            box_features = box_features.mean(dim=[2, 3]) #####![n*1000, 2048] need to mean this value
+        box_features = self.model.roi_heads.res5(box_features_)  # features of all 1k candidates [n*1000, 2048,7,7]
+        box_features = box_features.mean(dim=[2, 3]) #####![n*1000, 2048] need to mean this value
 
         return(nms_boxes,box_features,eachimg_selected_box_nums,activation)
     
@@ -146,7 +147,7 @@ class PosEmbedding(nn.Module):
     def forward(self, eachimg_selected_box_nums, box_features: Tensor) -> Tensor:
         inds = 0
         for ind, i in enumerate (eachimg_selected_box_nums):
-            box_features[inds:i+inds] = box_features[inds:i+inds] / i + self.positions[ind]
+            box_features[inds:i+inds] = box_features[inds:i+inds] + self.positions[ind]
             inds+=i
         return box_features
 
@@ -270,9 +271,20 @@ class FPN(nn.Module):
 class ScoreLayer(nn.Module):
     def __init__(self, k):
         super(ScoreLayer, self).__init__()
-        self.score = nn.Conv2d(k ,1, 3, 1, 1)
+        self.bot_layer = nn.Conv2d(k ,3, 1, 1, 0)
+        self.score = nn.Conv2d(6, 1, 3, 1, 1)
+        self.smooth = nn.Conv2d(6, 6, kernel_size=7, stride=1, padding=3)
+    def _upsample_cat(self, x, y):
+       
+        _,_,H,W = y.size()
+        return torch.cat((F.upsample(x, size=(H,W), mode='bilinear'), y),dim=1)
 
-    def forward(self, x, x_size=None):
+    def forward(self,  x,rgb, x_size=None):
+        x = self.bot_layer(x)
+        _,_,H,W = rgb.size()
+        rgb = F.upsample(rgb, size=(H//2,W//2), mode='bilinear')
+        x = self.smooth(self._upsample_cat(x,rgb))
+        assert x.shape[1] == 6
         x = self.score(x)
         if x_size is not None:
             x = F.interpolate(x, x_size, mode='bilinear', align_corners=True)
@@ -358,6 +370,9 @@ class CoS_Det_Net(nn.Module):
             assert False
             #"if appears nan, try to set a smaller lr"
         (p2, p3, p4) = self.fpn(activation)
-        res2 = self.score_Layer(p2,[256,256])
+        images = torch.stack([image['image'] for image in images])
+        
+        bmap = self.score_Layer(p2,images,x_size=[256,256])
 
-        return nms_boxes,pred_vector,res2
+        return nms_boxes,pred_vector,bmap
+

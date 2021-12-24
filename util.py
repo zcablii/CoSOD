@@ -228,4 +228,3 @@ def binary_after_boxes(bin_maps_,imgs_boxes, out_size = img_size):
 
         binary_maps.append(b_map*box_map)
     return torch.cat(binary_maps)
-
