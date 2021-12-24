@@ -60,6 +60,9 @@ def draw_gt_with_RPboxes(imgs_boxes, gts, name = 'gt'):
     for ix, boxes in enumerate(imgs_boxes):
         im = np.array(gts[ix].repeat(3,1,1).permute(1, 2, 0).cpu()).copy()*255
         # print("print(gt.shape)",im.shape)
+        if len(boxes) == 0:
+            cv2.imwrite('./RPN_imgs/'+name+str(ix)+'.png',im)
+            continue
         for box in boxes:
             cv2.rectangle(im,(box[0].int().item(),box[1].int().item()),(box[2].int().item(),box[3].int().item()),(0,255,0))
         cv2.imwrite('./RPN_imgs/'+name+str(ix)+'.png',im)
@@ -171,7 +174,7 @@ def boxes_to_gt(imgs_boxes, gts_):
     assert len(boxes_to_gts_list) == len(imgs_boxes)
     return boxes_to_gts_list
 
-def boxes_gt_ioa(imgs_boxes, gts_, pred_vector):
+def boxes_gt_ioa(imgs_boxes, gts_, pred_vector, at_least_pred_one = True):
     gts = gts_.clone() #size: [8, 1, 256, 256] 8 is image num
     pos_imgs_boxes = []
     gts_pos_area = []
@@ -206,7 +209,8 @@ def boxes_gt_ioa(imgs_boxes, gts_, pred_vector):
             pos_boxes.append(box)
             boxes_ind+=1
         if len(pos_boxes)==0:
-            pos_boxes.append(temp_box)
+            if at_least_pred_one:
+                pos_boxes.append(temp_box)
         if gt_area <= 0:
             gts_pos_area.append(0)
         else:
@@ -222,6 +226,10 @@ def binary_after_boxes(bin_maps_,imgs_boxes, out_size = img_size):
     binary_maps = []
     for (boxes, b_map) in zip(imgs_boxes, bin_maps):
         box_map = torch.zeros(img_size,img_size).cuda()
+
+        if len(boxes) == 0:
+            binary_maps.append(b_map*box_map)
+            continue
         for box in  boxes:
             [x1,y1,x2,y2] = box
             box_map[y1:y2+1,x1:x2+1] = 1
