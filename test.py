@@ -35,18 +35,37 @@ def test_net(model, batch_size):
             group_subpaths = data_batch[1]
             group_ori_sizes = data_batch[2]
 
-            for group, subpaths,ori_sizes in zip(cos_imgs_groups, group_subpaths,group_ori_sizes):
+            # print(cos_imgs_groups.shape)
+            # print(len(group_subpaths),group_subpaths[0])
+            num = cos_imgs_groups.shape[0]
+            group_nums = num//max_num + (1 if num%max_num>0 else 0)
+
+            batch_groups_paths = []
+            batch_imgs = []
+            batch_group_ori_sizes = []
+            for i in range(group_nums-1):
+                batch_groups_paths.append(group_subpaths[i*max_num:(i+1)*max_num])
+                batch_imgs.append(cos_imgs_groups[i*max_num:(i+1)*max_num])
+                batch_group_ori_sizes.append(group_ori_sizes[i*max_num:(i+1)*max_num])
+
+            batch_groups_paths.append(group_subpaths[-max_num:])
+            batch_imgs.append(cos_imgs_groups[-max_num:])
+            batch_group_ori_sizes.append(group_ori_sizes[-max_num:])
+
+            for group, subpaths,ori_sizes in zip(batch_imgs, batch_groups_paths,batch_group_ori_sizes):
+                # print(group.shape)
+                # print(len(subpaths))
                 inputs = []
                 for img in group:
                     inputs.append({"image": img, "height": img_size, "width": img_size})
 
-                _,pred_vector,output_binary = model(inputs)  
-                
-                pos_imgs_boxes = torch.round(torch.sigmoid(pred_vector)).flatten()
+                nms_boxes,pred_vector,output_binary = model(inputs)  
+                output_binary = torch.round(torch.sigmoid(output_binary))
+                pos_imgs_boxes = boxes_preded(nms_boxes,pred_vector)
 
                 output_binary = binary_after_boxes(output_binary, pos_imgs_boxes)
-                output = F.sigmoid(output_binary)
-
+                output = output_binary
+                # print(output)
                 saved_root = save_test_path_root + dataset_name
                 # save_final_path = saved_root + '/CADC_' + test_model + '/' + subpaths[0][0].split('/')[0] + '/'
                 save_final_path = saved_root + '/CADC/' + subpaths[0][0].split('/')[0] + '/'
@@ -66,7 +85,7 @@ def test_net(model, batch_size):
                     outputImage = transform(pre)
                     filename = subpath.split('/')[1]
                     outputImage.save(os.path.join(save_final_path, filename))
-
+                
 
 if __name__ == '__main__':
 

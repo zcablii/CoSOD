@@ -235,4 +235,36 @@ def binary_after_boxes(bin_maps_,imgs_boxes, out_size = img_size):
             box_map[y1:y2+1,x1:x2+1] = 1
 
         binary_maps.append(b_map*box_map)
-    return torch.cat(binary_maps)
+    return torch.cat(binary_maps).reshape(-1,1,img_size,img_size)
+
+
+def boxes_preded(imgs_boxes, pred_vector, at_least_pred_one = True):
+    
+    pos_imgs_boxes = []
+
+    y_pred_prb = torch.sigmoid(pred_vector).flatten()
+    y_pred_tags = torch.round(y_pred_prb)
+    boxes_ind = 0
+
+    for boxes in imgs_boxes:
+        pos_boxes = []
+        temp_box = boxes[0].tensor[0].round().int()
+        temp_max_prob_box = boxes_ind
+        for box in boxes:
+            box = box.round().int()
+            if y_pred_prb[boxes_ind]>y_pred_prb[temp_max_prob_box]:
+                temp_box = box
+                temp_max_prob_box = boxes_ind
+            if y_pred_tags[boxes_ind] == 0:
+                boxes_ind+=1
+                continue
+      
+            pos_boxes.append(box)
+            boxes_ind+=1
+        if len(pos_boxes)==0:
+            if at_least_pred_one:
+                pos_boxes.append(temp_box)
+       
+        pos_imgs_boxes.append(pos_boxes)
+
+    return pos_imgs_boxes

@@ -44,21 +44,22 @@ bn_momentum = 0.001
 
 ################# Testing #################
 # save output path
-save_test_path_root = root_path+'Preds/'
+save_test_path_root = root_path+'Preds/DetN/'
 if not os.path.exists(save_test_path_root):
     os.makedirs(save_test_path_root)
 
 # testing your own trained model
-test_model = 'iterations40000.pth'
+test_model = '12-25-3joint_epochs300.pth'
 test_model_dir = save_model_dir + test_model
 
 # testing our pretrained CADC model
 # test_model_dir = 'checkpoint/CADC.pth'
 
 # test dataset path
-test_dir_img = [root_path+'Data/CoCA/image',
-                root_path+'Data/CoSal2015/Image',
-                root_path+'Data/CoSOD3k/Image',
-                root_path+'Data/MSRC/Image',
+test_dir_img = [
+# root_path+'Data/CoCA/image'
+                root_path+'Data/CoSal2015/Image'
+                # root_path+'Data/CoSOD3k/Image'
+                # root_path+'Data/MSRC/Image',
                 ]
 
