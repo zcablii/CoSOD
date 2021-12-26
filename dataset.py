@@ -192,22 +192,32 @@ class CoData_Test(data.Dataset):
 
         names = os.listdir(self.img_dirs[item])
         num = len(names)
+        group_nums = num//max_num + (1 if num%max_num>0 else 0)
         img_paths = list(
             map(lambda x: os.path.join(self.img_dirs[item], x), names))
 
-        imgs = torch.Tensor(num, 3, self.sizes[0], self.sizes[1])
+        img_group_paths = []
+        for i in range(group_nums-1):
+            img_group_paths.append(img_paths[i*max_num:(i+1)*max_num])
+        img_group_paths.append(img_paths[-max_num:])
+
+        imgs = torch.Tensor(group_nums, max_num, 3, self.sizes[0], self.sizes[1])
 
         subpaths = []
         ori_sizes = []
-
-        for idx in range(num):
-            img = Image.open(img_paths[idx]).convert('RGB')
-            subpaths.append(
-                os.path.join(img_paths[idx].split('/')[-2],
-                             img_paths[idx].split('/')[-1][:-4] + '.png'))
-            ori_sizes.append((img.size[1], img.size[0]))
-            img = self.transform(img)
-            imgs[idx] = img
+        for grp_ind in range(group_nums):
+            subpath = []
+            ori_size = []
+            for idx in range(len(img_paths[grp_ind])):
+                img_path = img_paths[grp_ind][idx]
+                img = Image.open(img_path).convert('RGB')
+                subpath.append(
+                    os.path.join(img_path.split('/')[-2],
+                                img_path.split('/')[-1][:-4] + '.png'))
+                ori_size.append((img.size[1], img.size[0]))
+                img = self.transform(img)
+                imgs[grp_ind,idx] = img
+            subpaths.append(subpath)
 
         return imgs, subpaths, ori_sizes
 
