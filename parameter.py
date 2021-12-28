@@ -27,7 +27,7 @@ if not os.path.exists(save_model_dir):
 gpu_id = "0"
 max_num = 8
 dec_channels = 64
-box_feat_dim = 1024
+box_feat_dim = 256
 
 img_size = 256
 scale_size = 288
@@ -44,7 +44,7 @@ bn_momentum = 0.001
 
 ################# Testing #################
 # save output path
-save_test_path_root = root_path+'Preds/DetN/'
+save_test_path_root = root_path+'Data/Preds/DetN/'
 if not os.path.exists(save_test_path_root):
     os.makedirs(save_test_path_root)
 
@@ -57,9 +57,15 @@ test_model_dir = save_model_dir + test_model
 
 # test dataset path
 test_dir_img = [
-# root_path+'Data/CoCA/image'
-                root_path+'Data/CoSal2015/Image'
-                # root_path+'Data/CoSOD3k/Image'
-                # root_path+'Data/MSRC/Image',
+                root_path+'Data/CoCA/image',    
+                root_path+'Data/CoSal2015/Image',
+                root_path+'Data/CoSOD3k/Image',
+                root_path+'Data/MSRC/Image'
+                ]
+test_dir_gt = [
+                root_path+'Data/gt/CoCA',
+                root_path+'Data/gt/CoSal2015',
+                root_path+'Data/gt/CoSOD3k',
+                root_path+'Data/gt/MSRC'
                 ]
 

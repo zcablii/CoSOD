@@ -215,6 +215,55 @@ class CoData_Test(data.Dataset):
         return len(self.img_dirs)
 
 
+class CoData_Eval(data.Dataset):
+    def __init__(self, img_root, gt_root, img_size, transform, t_transform):
+
+        class_list = os.listdir(img_root)
+        self.sizes = [img_size, img_size]
+        self.transform = transform
+        self.t_transform = t_transform
+        self.img_dirs = list(
+            map(lambda x: os.path.join(img_root, x), class_list))
+        self.gt_dirs = list(
+            map(lambda x: os.path.join(gt_root, x), class_list))
+
+    def __getitem__(self, item):
+
+        names = os.listdir(self.img_dirs[item])
+        num = len(names)
+  
+        gt_names = [iname_list[:-3] + 'png' for iname_list in names]
+        
+        img_paths = list(
+            map(lambda x: os.path.join(self.img_dirs[item], x), names))
+        gt_paths = list(
+            map(lambda x: os.path.join(self.gt_dirs[item], x), gt_names))
+
+        imgs = torch.Tensor(num, 3, self.sizes[0], self.sizes[1])
+        gts = torch.Tensor(num, 1, self.sizes[0], self.sizes[1])
+
+        subpaths = []
+        ori_sizes = []
+
+        for idx in range(num):
+            img = Image.open(img_paths[idx]).convert('RGB')
+            gt = Image.open(gt_paths[idx]).convert('L')
+            subpaths.append(
+                os.path.join(img_paths[idx].split('/')[-2],
+                             img_paths[idx].split('/')[-1][:-4] + '.png'))
+            ori_sizes.append((img.size[1], img.size[0]))
+
+            img = self.transform(img)
+            imgs[idx] = img
+            gt = self.t_transform(gt)
+            gts[idx] = gt
+
+        return imgs, gts, subpaths, ori_sizes
+
+    def __len__(self):
+        return len(self.img_dirs)
+
+
 def get_loader(img_root, img_size, batch_size, gt_root=None, max_num=float('inf'), mode='train', num_thread=1, pin=False):
     shuffle = False
     mean = torch.Tensor(3, img_size, img_size)
@@ -266,7 +315,9 @@ def get_loader(img_root, img_size, batch_size, gt_root=None, max_num=float('inf'
     if mode == 'train':
         dataset = CoData_Train(img_root, gt_root, img_root_coco, gt_root_coco, img_size, transform, t_transform,
                                label_32_transform, label_64_transform, label_128_transform, max_num)
-
+    elif mode == 'eval':
+        print("Eval mode")
+        dataset = CoData_Eval(img_root, gt_root, img_size, transform, t_transform)
     else:
         dataset = CoData_Test(img_root, img_size, transform)
 

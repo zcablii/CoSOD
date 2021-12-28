@@ -90,8 +90,8 @@ class RPNet(nn.Module):
             box_features_ = self.model.roi_heads.pooler(features_, nms_boxes) #  [n,1024,14,14] pooler.py line ~220
         if self.mode=='train':    
             self.model.train()  
-        box_features = self.model.roi_heads.res5(box_features_)  # features of all 1k candidates [n*1000, 2048,7,7]
-        box_features = box_features.mean(dim=[2, 3]) #####![n*1000, 2048] need to mean this value
+        box_features = self.model.roi_heads.res5(box_features_)  # features of all 1k candidates [n*1000, parameter.box_feat_dim,7,7]
+        box_features = box_features.mean(dim=[2, 3]) #####![n*1000, parameter.box_feat_dim] need to mean this value
 
         return(nms_boxes,box_features,eachimg_selected_box_nums,activation)
     
@@ -117,29 +117,11 @@ class RPNet(nn.Module):
 
 
 
-class CoS_Classifier(nn.Module):
-    def __init__(self):
-        super(CoS_Classifier, self).__init__()
-      
-        self.classifier = nn.Sequential(
-            nn.Linear(2048, 2048),
-            nn.ReLU(True),
-            nn.Dropout(),
-            nn.Linear(2048, 1024),
-            nn.ReLU(True),
-            nn.Dropout(),
-            nn.Linear(1024, 2),
-        )
-
-    def forward(self, x):
-        pred_vector = self.classifier(x)
-        return pred_vector
-
 
 class PosEmbedding(nn.Module):
     def __init__(self):
         super().__init__()
-        positions = torch.rand(max_num, 2048).cuda()
+        positions = torch.rand(max_num, parameter.box_feat_dim).cuda()
         # for ind, i in enumerate (positions):
         #     positions[ind][ind] = 1
         self.positions =nn.Parameter(positions)
@@ -153,7 +135,7 @@ class PosEmbedding(nn.Module):
 
 # towardsdatascience.com/a-detailed-guide-to-pytorchs-nn-transformer-module-c80afbc9ffb1
 class MultiHeadAttention(nn.Module):
-    def __init__(self, emb_size: int = 2048, num_heads: int = 8, dropout: float = 0):
+    def __init__(self, emb_size: int = parameter.box_feat_dim, num_heads: int = 8, dropout: float = 0):
         super().__init__()
         self.emb_size = emb_size
         self.num_heads = num_heads
@@ -200,7 +182,7 @@ class FeedForwardBlock(nn.Sequential):
 
 class TransformerEncoderBlock(nn.Sequential):
     def __init__(self,
-                 emb_size: int = 2048,
+                 emb_size: int = parameter.box_feat_dim,
                  drop_p: float = 0.,
                  forward_expansion: int = 4,
                  forward_drop_p: float = 0.,
@@ -299,25 +281,25 @@ class CoS_objects_Classifier(nn.Module):
         self.trans_encoder = TransformerEncoder(depth=8)
         self.pos_e = PosEmbedding()
         self.classifier = nn.Sequential(
-            nn.Linear(2048, 2048),
+            nn.Linear(parameter.box_feat_dim, parameter.box_feat_dim),
             nn.ReLU(True),
-            nn.BatchNorm1d(2048),
+            nn.BatchNorm1d(parameter.box_feat_dim),
             nn.Dropout(),
-            nn.Linear(2048, 1024),
+            nn.Linear(parameter.box_feat_dim, 1024),
             nn.ReLU(True),
             nn.BatchNorm1d(1024),
             nn.Dropout(),
             nn.Linear(1024, 1),
         )
-        self.layerNorm = nn.BatchNorm1d(2048)
+        self.layerNorm = nn.BatchNorm1d(parameter.box_feat_dim)
 
     def forward(self, images):
         nms_boxes,box_features,eachimg_selected_box_nums,activation = self.det_net(images)
         # box_features = self.layerNorm(box_features)
         
         box_features = self.pos_e(eachimg_selected_box_nums,box_features)
-        # box_features = self.trans_encoder_init(box_features.reshape(1,-1,2048))
-        att_features = self.trans_encoder(box_features.reshape(1,-1,2048)).reshape(-1,2048)
+        # box_features = self.trans_encoder_init(box_features.reshape(1,-1,parameter.box_feat_dim))
+        att_features = self.trans_encoder(box_features.reshape(1,-1,parameter.box_feat_dim)).reshape(-1,parameter.box_feat_dim)
         # print(len(box_features),len(att_features),len(eachimg_selected_box_nums),box_features[0].shape,att_features[0].shape)
         # print(att_features,att_features.shape)
         pred_vector = self.classifier(att_features)
@@ -336,32 +318,34 @@ class CoS_Det_Net(nn.Module):
     def __init__(self):
         super(CoS_Det_Net, self).__init__()
         self.det_net = RPNet()
-        self.trans_encoder = TransformerEncoder(depth=8)
+        self.trans_encoder = TransformerEncoder(depth=4)
         self.pos_e = PosEmbedding()
         self.fpn = FPN()
         self.score_Layer = ScoreLayer(256)
-        self.classifier = nn.Sequential(
-            nn.Linear(2048, 2048),
+        self.squeeze_features = nn.Sequential(
             nn.ReLU(True),
             nn.BatchNorm1d(2048),
+            nn.Linear(2048, parameter.box_feat_dim),
+            nn.BatchNorm1d(parameter.box_feat_dim)
+        )
+        self.classifier = nn.Sequential(
+            nn.Linear(parameter.box_feat_dim, parameter.box_feat_dim),
+            nn.ReLU(True),
+            nn.BatchNorm1d(parameter.box_feat_dim),
             nn.Dropout(),
-            nn.Linear(2048, 1024),
+            nn.Linear(parameter.box_feat_dim, 1024),
             nn.ReLU(True),
             nn.BatchNorm1d(1024),
             nn.Dropout(),
             nn.Linear(1024, 1),
         )
-        self.layerNorm = nn.BatchNorm1d(2048)
+        self.layerNorm = nn.BatchNorm1d(parameter.box_feat_dim)
 
     def forward(self, images):
         nms_boxes,box_features,eachimg_selected_box_nums,activation = self.det_net(images)
-        # box_features = self.layerNorm(box_features)
-        
+        box_features = self.squeeze_features(box_features)
         box_features = self.pos_e(eachimg_selected_box_nums,box_features)
-        # box_features = self.trans_encoder_init(box_features.reshape(1,-1,2048))
-        att_features = self.trans_encoder(box_features.reshape(1,-1,2048)).reshape(-1,2048)
-        # print(len(box_features),len(att_features),len(eachimg_selected_box_nums),box_features[0].shape,att_features[0].shape)
-        # print(att_features,att_features.shape)
+        att_features = self.trans_encoder(box_features.reshape(1,-1,parameter.box_feat_dim)).reshape(-1,parameter.box_feat_dim)
         pred_vector = self.classifier(att_features)
         if math.isnan(pred_vector[0][0]):
             print("box_features: ",box_features)

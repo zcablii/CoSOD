@@ -3,7 +3,6 @@ import torch
 import numpy as np
 import cv2
 from parameter import *
-from self_attention import *
 import torch.nn as nn
 from torchvision.ops import *
 import matplotlib.pyplot as plt

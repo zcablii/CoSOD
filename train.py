@@ -7,7 +7,6 @@ from model import *
 from dataset import get_loader
 import math
 from parameter import *
-from self_attention import *
 import parameter
 import datetime
 def save_loss(save_dir, whole_iter_num, epoch_total_loss, epoch_loss, epoch):
@@ -39,7 +38,7 @@ def save_lr(save_dir, optimizer):
     fh.close()
 
 
-def train_classifier(model):
+def train_classifier(model,epochs=300):
 
     train_loader = get_loader(img_root, img_size, batch_size, gt_root, max_num=max_num, mode='train', num_thread=1,
                               pin=False)
@@ -144,10 +143,10 @@ def train_classifier(model):
             optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
         
         
-    torch.save(model.state_dict(), save_model_dir + 'cls_epochs{}.pth'.format(epochs))
+    # torch.save(model.state_dict(), save_model_dir + 'cls_epochs{}.pth'.format(epochs))
 
 
-def train_seg(model):
+def train_seg(model,epochs=300):
 
     train_loader = get_loader(img_root, img_size, batch_size, gt_root, max_num=max_num, mode='train', num_thread=1,
                               pin=False)
@@ -211,12 +210,12 @@ def train_seg(model):
         if (epoch+1) % 50==0:
             parameter.lr = parameter.lr*lr_decay_gamma
             optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
-    torch.save(model.state_dict(), save_model_dir + 'seg_epochs{}.pth'.format(epochs))
+    # torch.save(model.state_dict(), save_model_dir + 'seg_epochs{}.pth'.format(epochs))
 
 
 
 
-def train_joint(model):
+def train_joint(model,epochs=300):
 
     train_loader = get_loader(img_root, img_size, batch_size, gt_root, max_num=max_num, mode='train', num_thread=1,
                               pin=False)
@@ -313,6 +312,53 @@ def train_joint(model):
         if (epoch+1) % 50==0:
             parameter.lr = parameter.lr*lr_decay_gamma
             optimizer = adjust_learning_rate(optimizer, decay_rate=lr_decay_gamma)
+
+        if epoch % 10 ==0:
+            print("Evaluation:")
+            eval_loader = get_loader(test_dir_img[0], img_size, 1, gt_root=test_dir_gt[0], mode='eval', num_thread=1)
+            iter_num = len(eval_loader.dataset) // batch_size
+            
+            for i, data_batch in enumerate(eval_loader):
+                print('--------{}/{}'.format(i, len(eval_loader.dataset)))
+                if (i + 1) > iter_num: break
+
+                cos_imgs_groups = Variable(data_batch[0].squeeze(0).cuda())
+                gts = Variable(data_batch[1].squeeze(0).cuda())
+            
+                num = cos_imgs_groups.shape[0]
+                group_nums = num//max_num + (1 if num%max_num>0 else 0)
+
+                batch_imgs = []
+                batch_gts = []
+                for i in range(group_nums-1):
+                    batch_imgs.append(cos_imgs_groups[i*max_num:(i+1)*max_num])
+                    batch_gts.append(gts[i*max_num:(i+1)*max_num])
+                    
+                batch_imgs.append(cos_imgs_groups[-max_num:])
+                batch_gts.append(gts[-max_num:])
+               
+                for group,gts_ in zip(batch_imgs,batch_gts):
+                    # print(group.shape)
+                    # print(len(subpaths))
+                    inputs = []
+                    for img in group:
+                        inputs.append({"image": img, "height": img_size, "width": img_size})
+
+                    nms_boxes,pred_vector,output_binary = model(inputs) 
+                    output_binary = torch.round(torch.sigmoid(output_binary))
+                    pred_pos_imgs_boxes = boxes_preded(nms_boxes,pred_vector)
+                    output_binary = binary_after_boxes(output_binary, pred_pos_imgs_boxes)
+
+                    boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts_),[])
+                    boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).float().cuda() # 1
+                    
+                    # pos_imgs_boxes,gts_pos_area = boxes_gt_ioa(nms_boxes, gts_, pred_vector,False)
+                    correct_pred,y_pred_tags = binary_correct_pred_num(pred_vector,boxes_to_gts_list) #1
+                  
+
+                    gt_b_maps = binary_after_boxes(gts_,pos_imgs_boxes)
+            print("acc:...")
+
     crt_time = datetime.datetime.now()
     torch.save(model.state_dict(), save_model_dir +str(crt_time.month)+'-'+str(crt_time.day)+'-'+str(crt_time.hour)
                     + 'joint_epochs{}.pth'.format(epochs))
@@ -325,6 +371,6 @@ if __name__ == '__main__':
     model = CoS_Det_Net()
     model.train()
     model.cuda()
-    # train_seg(model)
+    train_seg(model,epochs=100)
     # train_classifier(model)
     train_joint(model)
