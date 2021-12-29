@@ -61,7 +61,7 @@ def train_log_string(out_str, display=True):
         print(out_str)
 
 
-def val_log_string(out_str, display=False):
+def val_log_string(out_str, display=True):
     out_str = str(out_str)
     VAL_LOG_FOUT.write(out_str + '\n')
     VAL_LOG_FOUT.flush()
@@ -152,7 +152,7 @@ def train_classifier(model, train_loader, epoch, optimizer, criterion):
         #                              data_time=data_time,
         #                              loss=epoch_loss))
 
-    if (epoch + 1) % cfg.LOG.EPOCH_FREQ == 0 or epoch == 0:
+    if (epoch + 1) % cfg.LOG.EPOCH_FREQ == 0:
         train_log_string('classification --- '
                          'epoch: {0:d} --- '
                          'loss: {1:.4f} --- '
@@ -215,7 +215,7 @@ def train_seg(model, train_loader, epoch, optimizer, criterion):
         #                              data_time=data_time,
         #                              loss=epoch_loss))
 
-    if (epoch + 1) % cfg.LOG.EPOCH_FREQ == 0 or epoch == 0:
+    if (epoch + 1) % cfg.LOG.EPOCH_FREQ == 0:
         train_log_string('segmentation --- '
                          'epoch: {0:d} --- '
                          'loss: {1:.4f}'.format(epoch,
@@ -331,7 +331,6 @@ def main():
     else:
         eval_loader = []
     model = CoS_Det_Net(cfg)
-    model.train()
     model.cuda()
     train_log_string('Starting training:'
                      '  Train steps: {}'
@@ -352,6 +351,7 @@ def main():
     iterate = 0
     if cfg.SOLVER.JOINT:
         for epoch in range(cfg.SOLVER.MAX_EPOCHS):
+            model.train()
             train_classifier(model=model,
                              train_loader=train_loader,
                              epoch=epoch,
@@ -366,7 +366,7 @@ def main():
             if (epoch + 1) % cfg.SOLVER.DECAY_STEPS == 0:
                 optimizer_classifier = adjust_learning_rate(optimizer_classifier, decay_rate=cfg.SOLVER.LR_DECAY_GAMMA)
                 optimizer_seg = adjust_learning_rate(optimizer_seg, decay_rate=cfg.SOLVER.LR_DECAY_GAMMA)
-            if (epoch + 1) % cfg.LOG.EPOCH_FREQ != 0:
+            if (epoch + 1) % cfg.LOG.EPOCH_FREQ == 0:
                 if cfg.VAL.USE:
                     eval_model(model, eval_loader, epoch)
                 save_file = os.path.join(
