@@ -6,80 +6,15 @@ import torch
 from torchvision import transforms
 
 
-class Eval_thread():
-    def __init__(self, loader, method, dataset, output_dir, cuda):
-        self.loader = loader
-        self.method = method
-        self.dataset = dataset
+class Evaluator():
+    def __init__(self,loaders, cuda):
+        self.loaders = loaders
         self.cuda = cuda
-        self.output_dir = output_dir
-        self.logfile = os.path.join(output_dir, 'result.txt')
-
-    def run(self):
-        Res = {}
-        start_time = time.time()
-        mae = self.Eval_mae()
-        Res['MAE'] = mae
-
-        Fm, prec, recall = self.Eval_fmeasure()
-        max_f = Fm.max().item()
-        mean_f = Fm.mean().item()
-        prec = prec.cpu().numpy()
-        recall = recall.cpu().numpy()
-        avg_p = self.Eval_AP(prec, recall)  # AP
-        Fm = Fm.cpu().numpy()
-        Res['MaxFm'] = max_f
-        Res['MeanFm'] = mean_f
-        Res['AP'] = avg_p
-        Res['Prec'] = prec
-        Res['Recall'] = recall
-        Res['Fm'] = Fm
-
-        auc, TPR, FPR = self.Eval_auc()
-        TPR = TPR.cpu().numpy()
-        FPR = FPR.cpu().numpy()
-
-        Res['AUC'] = auc
-        Res['TPR'] = TPR
-        Res['FPR'] = FPR
-
-        Em = self.Eval_Emeasure()
-        max_e = Em.max().item()
-        mean_e = Em.mean().item()
-        Em = Em.cpu().numpy()
-        Res['MaxEm'] = max_e
-        Res['MeanEm'] = mean_e
-        Res['Em'] = Em
-
-        s = self.Eval_Smeasure()
-        Res['Sm'] = s
-        os.makedirs(os.path.join(self.output_dir, 'Detail'), exist_ok=True)
-        torch.save(
-            Res,
-            os.path.join(self.output_dir, 'Detail',
-                         self.dataset + '_' + self.method + '.pth'))
-
-        self.LOG(
-            '{} ({}): {:.4f} mae || {:.4f} max-fm || {:.4f} mean-fm || {:.4f} max-Emeasure || {:.4f} mean-Emeasure || {:.4f} S-measure || {:.4f} AP || {:.4f} AUC.\n'
-            .format(self.dataset, self.method, mae, max_f, mean_f, max_e,
-                    mean_e, s, avg_p, auc))
-        return '[cost:{:.4f}s] {} ({}): {:.4f} mae || {:.4f} max-fm || {:.4f} mean-fm || {:.4f} max-Emeasure || {:.4f} mean-Emeasure || {:.4f} S-measure || {:.4f} AP || {:.4f} AUC.'.format(
-            time.time() - start_time, self.dataset, self.method, mae, max_f,
-            mean_f, max_e, mean_e, s, avg_p, auc)
 
     def Eval_mae(self):
-        print('eval[MAE]:{} dataset with {} method.'.format(
-            self.dataset, self.method))
         avg_mae, img_num = 0.0, 0.0
         with torch.no_grad():
-            trans = transforms.Compose([transforms.ToTensor()])
-            for pred, gt in self.loader:
-                if self.cuda:
-                    pred = trans(pred).cuda()
-                    gt = trans(gt).cuda()
-                else:
-                    pred = trans(pred)
-                    gt = trans(gt)
+            for pred, gt in self.loaders:
                 mea = torch.abs(pred - gt).mean()
                 if mea == mea:  # for Nan
                     avg_mae += mea
@@ -88,24 +23,13 @@ class Eval_thread():
             return avg_mae.item()
 
     def Eval_fmeasure(self):
-        print('eval[FMeasure]:{} dataset with {} method.'.format(
-            self.dataset, self.method))
         beta2 = 0.3
         avg_f, avg_p, avg_r, img_num = 0.0, 0.0, 0.0, 0.0
 
         with torch.no_grad():
-            trans = transforms.Compose([transforms.ToTensor()])
-            for pred, gt in self.loader:
-                if self.cuda:
-                    pred = trans(pred).cuda()
-                    gt = trans(gt).cuda()
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
+            for pred, gt in self.loaders:
+                pred = (pred - torch.min(pred)) / (torch.max(pred) -
                                                        torch.min(pred) + 1e-20)
-                else:
-                    pred = trans(pred)
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
-                                                       torch.min(pred) + 1e-20)
-                    gt = trans(gt)
                 prec, recall = self._eval_pr(pred, gt, 255)
                 f_score = (1 + beta2) * prec * recall / (beta2 * prec + recall)
                 f_score[f_score != f_score] = 0  # for Nan
@@ -119,24 +43,12 @@ class Eval_thread():
             return Fm, avg_p, avg_r
 
     def Eval_auc(self):
-        print('eval[AUC]:{} dataset with {} method.'.format(
-            self.dataset, self.method))
-
         avg_tpr, avg_fpr, avg_auc, img_num = 0.0, 0.0, 0.0, 0.0
 
         with torch.no_grad():
-            trans = transforms.Compose([transforms.ToTensor()])
-            for pred, gt in self.loader:
-                if self.cuda:
-                    pred = trans(pred).cuda()
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
+            for pred, gt in self.loaders:
+                pred = (pred - torch.min(pred)) / (torch.max(pred) -
                                                        torch.min(pred) + 1e-20)
-                    gt = trans(gt).cuda()
-                else:
-                    pred = trans(pred)
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
-                                                       torch.min(pred) + 1e-20)
-                    gt = trans(gt)
                 TPR, FPR = self._eval_roc(pred, gt, 255)
                 avg_tpr += TPR
                 avg_fpr += FPR
@@ -148,29 +60,17 @@ class Eval_thread():
             avg_tpr = avg_tpr[sorted_idxes]
             avg_fpr = avg_fpr[sorted_idxes]
             avg_auc = torch.trapz(avg_tpr, avg_fpr)
-
             return avg_auc.item(), avg_tpr, avg_fpr
 
     def Eval_Emeasure(self):
-        print('eval[EMeasure]:{} dataset with {} method.'.format(
-            self.dataset, self.method))
         avg_e, img_num = 0.0, 0.0
         with torch.no_grad():
-            trans = transforms.Compose([transforms.ToTensor()])
             Em = torch.zeros(255)
             if self.cuda:
                 Em = Em.cuda()
-            for pred, gt in self.loader:
-                if self.cuda:
-                    pred = trans(pred).cuda()
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
+            for pred, gt in self.loaders:
+                pred = (pred - torch.min(pred)) / (torch.max(pred) -
                                                        torch.min(pred) + 1e-20)
-                    gt = trans(gt).cuda()
-                else:
-                    pred = trans(pred)
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
-                                                       torch.min(pred) + 1e-20)
-                    gt = trans(gt)
                 Em += self._eval_e(pred, gt, 255)
                 img_num += 1.0
 
@@ -178,22 +78,11 @@ class Eval_thread():
             return Em
 
     def Eval_Smeasure(self):
-        print('eval[SMeasure]:{} dataset with {} method.'.format(
-            self.dataset, self.method))
         alpha, avg_q, img_num = 0.5, 0.0, 0.0
         with torch.no_grad():
-            trans = transforms.Compose([transforms.ToTensor()])
-            for pred, gt in self.loader:
-                if self.cuda:
-                    pred = trans(pred).cuda()
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
+            for pred, gt in self.loaders:
+                pred = (pred - torch.min(pred)) / (torch.max(pred) -
                                                        torch.min(pred) + 1e-20)
-                    gt = trans(gt).cuda()
-                else:
-                    pred = trans(pred)
-                    pred = (pred - torch.min(pred)) / (torch.max(pred) -
-                                                       torch.min(pred) + 1e-20)
-                    gt = trans(gt)
                 y = gt.mean()
                 if y == 0:
                     x = pred.mean()
@@ -213,9 +102,6 @@ class Eval_thread():
             avg_q /= img_num
             return avg_q
 
-    def LOG(self, output):
-        with open(self.logfile, 'a') as f:
-            f.write(output)
 
     def _eval_e(self, y_pred, y, num):
         if self.cuda:
@@ -365,8 +251,6 @@ class Eval_thread():
     def Eval_AP(self, prec, recall):
         # Ref:
         # https://github.com/facebookresearch/Detectron/blob/05d04d3a024f0991339de45872d02f2f50669b3d/lib/datasets/voc_eval.py#L54
-        print('eval[AP]:{} dataset with {} method.'.format(
-            self.dataset, self.method))
         ap_r = np.concatenate(([0.], recall, [1.]))
         ap_p = np.concatenate(([0.], prec, [0.]))
         sorted_idxes = np.argsort(ap_r)

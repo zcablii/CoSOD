@@ -8,6 +8,7 @@ import numbers
 import types
 import collections
 
+
 class Compose(object):
     """Composes several transforms together.
 
@@ -66,6 +67,7 @@ class ToTensor255(object):
 
         else:
             return img
+
 
 class ToTensor(object):
     """Converts a PIL.Image or numpy.ndarray (H x W x C) in the range
@@ -143,6 +145,7 @@ class ToTensor_BGR(object):
 
         else:
             return img
+
 
 class ToPILImage(object):
     """Converts a torch.*Tensor of shape C x H x W or a numpy ndarray of shape
@@ -345,7 +348,7 @@ class RandomSizedCrop(object):
                 y1 = random.randint(0, img.size[1] - h)
 
                 img = img.crop((x1, y1, x1 + w, y1 + h))
-                assert(img.size == (w, h))
+                assert (img.size == (w, h))
 
                 return img.resize((self.size, self.size), self.interpolation)
 

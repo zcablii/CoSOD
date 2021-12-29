@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=0 python test.py
+python train.py --config configs/cosal-joint-train.yml

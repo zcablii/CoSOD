@@ -1,2 +1,0 @@
-CoCA (DetN): 0.1621 mae || 0.4162 max-fm || 0.4130 mean-fm || 0.6633 max-Emeasure || 0.6546 mean-Emeasure || 0.5915 S-measure || 0.3186 AP || 0.7251 AUC.
-CoSOD3k (DetN): 0.1060 mae || 0.6865 max-fm || 0.6831 mean-fm || 0.7946 max-Emeasure || 0.7922 mean-Emeasure || 0.7373 S-measure || 0.6006 AP || 0.8196 AUC.

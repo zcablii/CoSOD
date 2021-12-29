@@ -1,16 +1,10 @@
-import torch
 import torch.backends.cudnn as cudnn
-import torch.nn.functional as F
 from torch.autograd import Variable
-from dataset import get_loader
-import transforms as trans
+from CoSOD.dataset import transforms as trans
 import time
 from parameter import *
-from dataset import get_loader
-import math
+from CoSOD.dataset.dataset import get_loader
 from parameter import *
-import parameter
-import datetime
 from model import *
 
 def test_net(model, batch_size):

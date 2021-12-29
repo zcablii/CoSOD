@@ -1,0 +1,66 @@
+TASK: "cosal-joint-train@DUTS_class"
+
+GPU:
+  USE: True
+  ID: [0,1]
+
+LOG:
+  EPOCH_FREQ: 5
+  BATCH_FREQ: 20
+  DRAW_BOX: True
+
+MODEL:
+  ARCH: "cosal"
+  DETECTOR:
+    BACKBONE: "R_101_C4"
+    PRETRAINED_PATH: "../models/"
+  LOAD: ""
+  SAVEDIR: "results/"
+
+DATA:
+  ROOT: "../"
+  NAMES: ["DUTS_class", "COCO9213-os"]
+  IMAGE_DIRS: ["Data/DUTS_class/img/","Data/COCO9213-os/img/"]
+  GT_DIRS: ["Data/DUTS_class/gt/","Data/COCO9213-os/gt/"]
+  SYN_NAMES: ["DUTS_class"]
+  SYN_TYPES: [[["img_png_seamless_cloning_add_naive",
+                "_syn",
+                3,
+                True],
+                ["img_png_seamless_cloning_add_naive_reverse",
+                 "_ReverseSyn",
+                 3,
+                 False]]]
+  SYN_IMAGE_DIRS: ["Data/DUTS_class_syn/{}/img/{}/"]
+  SYN_GT_DIRS: ["Data/DUTS_class_syn/{}/gt/{}/"]
+  BATCH_SIZE: 1
+  WORKERS: 8
+  MAX_NUM: 8
+  IMAGE_H: 256
+  IMAGE_W: 256
+  SCALE_H: 288
+  SCALE_W: 288
+  AUG: True
+
+VAL:
+  USE: True
+  ROOT: "../"
+  IMAGE_DIR: "Data/CoCA/image"
+  GT_DIR: "Data/gt/CoCA"
+
+TEST:
+  ROOT: "../"
+  IMAGE_DIRS: ['Data/CoCA/image','Data/CoSOD3k/image','Data/CoSal2015/image']
+  GT_DIRS: ['Data/gt/CoCA','Data/gt/CoSOD3k','Data/gt/CoSal2015']
+  CHECKPOINT:  ""
+
+SOLVER:
+  JOINT: True
+  MAX_EPOCHS: 300
+  LR: 0.0001
+  LR_DECAY_GAMMA: 0.5
+  TRAIN_STEPS: 4000
+  BN_MOMENTUM: 0.001
+  LOSS_WEIGHTS: [1, 0.8, 0.8, 0.5, 0.5, 0.5]
+  DECODER_CHANNELS: 64
+  BOX_FEATURE_DIM: 256
