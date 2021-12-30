@@ -5,20 +5,21 @@ GPU:
   ID: [0,1]
 
 LOG:
-  EPOCH_FREQ: 5
+  EPOCH_FREQ: 1
   BATCH_FREQ: 20
   DRAW_BOX: True
+  DRAW_BOX_FREQ: 500
 
 MODEL:
   ARCH: "cosal"
   DETECTOR:
     BACKBONE: "R_101_C4"
-    PRETRAINED_PATH: "../models/"
+    PRETRAINED_PATH: "../CoSOD/models/"
   LOAD: ""
   SAVEDIR: "results/"
 
 DATA:
-  ROOT: "../"
+  ROOT: "../CoSOD/"
   NAMES: ["DUTS_class", "COCO9213-os"]
   IMAGE_DIRS: ["Data/DUTS_class/img/","Data/COCO9213-os/img/"]
   GT_DIRS: ["Data/DUTS_class/gt/","Data/COCO9213-os/gt/"]
@@ -44,12 +45,12 @@ DATA:
 
 VAL:
   USE: True
-  ROOT: "../"
+  ROOT: "../CoSOD/"
   IMAGE_DIR: "Data/CoCA/image"
   GT_DIR: "Data/gt/CoCA"
 
 TEST:
-  ROOT: "../"
+  ROOT: "../CoSOD/"
   IMAGE_DIRS: ['Data/CoCA/image','Data/CoSOD3k/image','Data/CoSal2015/image']
   GT_DIRS: ['Data/gt/CoCA','Data/gt/CoSOD3k','Data/gt/CoSal2015']
   CHECKPOINT:  ""
@@ -59,8 +60,10 @@ SOLVER:
   MAX_EPOCHS: 300
   LR: 0.0001
   LR_DECAY_GAMMA: 0.5
+  DECAY_STEPS: 50
   TRAIN_STEPS: 4000
   BN_MOMENTUM: 0.001
   LOSS_WEIGHTS: [1, 0.8, 0.8, 0.5, 0.5, 0.5]
   DECODER_CHANNELS: 64
-  BOX_FEATURE_DIM: 256
+  TRANSFORMER_LAYERS: 2
+  BOX_FEATURE_DIM: 128

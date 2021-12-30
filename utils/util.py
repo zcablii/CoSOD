@@ -50,27 +50,54 @@ def filter_boxes_by_prob(boxes_probs, min_num=3, max_mun=40):
     return selected_boxes_probs
 
 
-def draw_gt_with_RPboxes(imgs_boxes, gts, name='gt'):
-    for ix, boxes in enumerate(imgs_boxes):
-        im = np.array(gts[ix].repeat(3, 1, 1).permute(1, 2, 0).cpu()).copy() * 255
-        # print("print(gt.shape)",im.shape)
-        if len(boxes) == 0:
+def draw_gt_with_RPboxes(imgs_boxes, gts, name='gt', gt_boxes=None, pred_map = None):
+    if not gt_boxes is None:
+        assert not pred_map is None
+        ix = 0
+        for pred_boxes, gt_boxes in zip(imgs_boxes, gt_boxes):
+            gt_map = np.array(gts[ix].permute(1, 2, 0).cpu()).copy() * 255
+            im = np.array(pred_map[ix].repeat(3, 1, 1).permute(1, 2, 0).cpu()).copy() * 255
+            im[:,:,0] = gt_map[:,:,0]
+
+            # print("print(gt.shape)",im.shape)
+            if len(gt_boxes) == 0 and len(pred_boxes)==0:
+                cv2.imwrite('./RPN_imgs/' + name + str(ix) + '.png', im)
+                ix+=1
+                continue
+            if len(pred_boxes) !=0:
+                for pred_box in pred_boxes:
+                    cv2.rectangle(im, (pred_box[0].int().item(), pred_box[1].int().item()), (pred_box[2].int().item(), pred_box[3].int().item()),
+                                (0, 255, 255))
+            if len(gt_boxes)!=0:
+                for gt_boxe in gt_boxes:
+                    
+                    cv2.rectangle(im, (gt_boxe[0].int().item()-1, gt_boxe[1].int().item()-1), (gt_boxe[2].int().item()+1, gt_boxe[3].int().item()+1),
+                                (255, 0, 0))
             cv2.imwrite('./RPN_imgs/' + name + str(ix) + '.png', im)
-            continue
-        for box in boxes:
-            cv2.rectangle(im, (box[0].int().item(), box[1].int().item()), (box[2].int().item(), box[3].int().item()),
-                          (0, 255, 0))
-        cv2.imwrite('./RPN_imgs/' + name + str(ix) + '.png', im)
+            ix+=1
 
 
-def write_boxes_imgs(nms_boxes, inputs):
+    else :
+        for ix, boxes in enumerate(imgs_boxes):
+            im = np.array(gts[ix].repeat(3, 1, 1).permute(1, 2, 0).cpu()).copy() * 255
+            # print("print(gt.shape)",im.shape)
+            if len(boxes) == 0:
+                cv2.imwrite('./RPN_imgs/' + name + str(ix) + '.png', im)
+                continue
+            for box in boxes:
+                cv2.rectangle(im, (box[0].int().item(), box[1].int().item()), (box[2].int().item(), box[3].int().item()),
+                            (0, 255, 0))
+            cv2.imwrite('./RPN_imgs/' + name + str(ix) + '.png', im)
+
+
+def write_boxes_imgs(nms_boxes, inputs, name=''):
     for ix, boxes in enumerate(nms_boxes):
         im = np.array(inputs[ix]['image'].permute(1, 2, 0).cpu()).copy()
         # print("print(im.shape)",im.shape)
         for box in boxes:
             cv2.rectangle(im, (box[0].int().item(), box[1].int().item()), (box[2].int().item(), box[3].int().item()),
                           (0, 255, 0))
-        cv2.imwrite('./RPN_imgs/' + str(ix) + '.png', im)
+        cv2.imwrite('./RPN_imgs/' +name+ str(ix) + '.png', im)
 
 
 def correct_pred_num(y_pred, y_test):
@@ -158,14 +185,21 @@ def boxes_to_gt(imgs_boxes, gts_):
             [x1, y1, x2, y2] = box
             box_cut_gt = gt[y1:y2 + 1, x1:x2 + 1]
             box_gt_area = box_cut_gt.flatten().sum()
+            bbox_area = ((box[2] - box[0]) * (box[3] - box[1]))
 
-            if box_gt_area / gt_area < 0.2:
-                if box_gt_area / ((box[2] - box[0]) * (box[3] - box[1])) < 0.2:
+            # if box_gt_area / gt_area < 0.2:
+            #     if box_gt_area / bbox_area < 0.2:
+            #         boxes_to_gt_list.append(0)
+            #     else:
+            #         boxes_to_gt_list.append(1)
+            # else:
+            #     boxes_to_gt_list.append(1)
+
+            if box_gt_area / gt_area < 0.2 or box_gt_area / bbox_area < 0.2:
                     boxes_to_gt_list.append(0)
-                else:
-                    boxes_to_gt_list.append(1)
             else:
                 boxes_to_gt_list.append(1)
+
         boxes_to_gts_list.append(boxes_to_gt_list)
     assert len(boxes_to_gts_list) == len(imgs_boxes)
     return boxes_to_gts_list
@@ -214,8 +248,6 @@ def boxes_gt_ioa(imgs_boxes, gts_, pred_vector, at_least_pred_one=True, draw_box
             gts_pos_area.append(gt_pos_area / gt_area)
         pos_imgs_boxes.append(pos_boxes)
 
-    if draw_box:
-        draw_gt_with_RPboxes(pos_imgs_boxes, gts_, name='pred')
     return pos_imgs_boxes, gts_pos_area
 
 

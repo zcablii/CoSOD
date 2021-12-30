@@ -8,7 +8,7 @@ from detectron2 import model_zoo
 
 import matplotlib.pyplot as plt
 import numpy as np
-from skimage.transform import resize
+# from skimage.transform import resize
 
 # import some common libraries
 import torch.nn.functional as F
@@ -21,7 +21,7 @@ import math
 
 from torchvision.ops import nms
 
-from CoSOD.utils.util import filter_boxes_by_prob, write_boxes_imgs
+from utils.util import filter_boxes_by_prob, write_boxes_imgs
 
 setup_logger()
 
@@ -92,8 +92,7 @@ class RPNet(nn.Module):
             #     each_img_boxes_features = roi_cut(feature_map,img_boxes,order) # implement roi cut!
             #     box_features_.append(each_img_boxes_features)
             # box_features_=torch.cat(box_features_)
-            # if self.draw_box:
-            #     write_boxes_imgs(nms_boxes, image_Input)
+            
 
             # [n,1024,14,14] pooler.py line ~220
             box_features_ = self.model.roi_heads.pooler(features_, nms_boxes)
@@ -136,7 +135,7 @@ class PosEmbedding(nn.Module):
     def forward(self, eachimg_selected_box_nums, box_features: Tensor) -> Tensor:
         inds = 0
         for ind, i in enumerate(eachimg_selected_box_nums):
-            box_features[inds:i + inds] = box_features[inds:i + inds] + self.positions[ind]
+            box_features[inds:i + inds] = box_features[inds:i + inds]/i + self.positions[ind]
             inds += i
         return box_features
 
@@ -283,45 +282,6 @@ class ScoreLayer(nn.Module):
         return x
 
 
-class CoS_objects_Classifier(nn.Module):
-    def __init__(self, max_num, box_feat_dim):
-        super(CoS_objects_Classifier, self).__init__()
-        self.det_net = RPNet()
-        self.trans_encoder = TransformerEncoder(depth=8, emb_size=box_feat_dim)
-        self.pos_e = PosEmbedding(max_num, box_feat_dim)
-        self.box_feat_dim = box_feat_dim
-        self.classifier = nn.Sequential(
-            nn.Linear(self.box_feat_dim, self.box_feat_dim),
-            nn.ReLU(True),
-            nn.BatchNorm1d(self.box_feat_dim),
-            nn.Dropout(),
-            nn.Linear(self.box_feat_dim, 1024),
-            nn.ReLU(True),
-            nn.BatchNorm1d(1024),
-            nn.Dropout(),
-            nn.Linear(1024, 1),
-        )
-        self.layerNorm = nn.BatchNorm1d(self.box_feat_dim)
-
-    def forward(self, images):
-        nms_boxes, box_features, eachimg_selected_box_nums, activation = self.det_net(images)
-        # box_features = self.layerNorm(box_features)
-
-        box_features = self.pos_e(eachimg_selected_box_nums, box_features)
-        # box_features = self.trans_encoder_init(box_features.reshape(1,-1,parameter.box_feat_dim))
-        att_features = self.trans_encoder(box_features.reshape(1, -1, self.box_feat_dim)).reshape(-1, self.box_feat_dim)
-        # print(len(box_features),len(att_features),len(eachimg_selected_box_nums),box_features[0].shape,att_features[0].shape)
-        # print(att_features,att_features.shape)
-        pred_vector = self.classifier(att_features)
-        if math.isnan(pred_vector[0][0]):
-            print("box_features: ", box_features)
-            print("att_features: ", att_features)
-            print("nan, value exploded")
-            assert False
-            # "if appears nan, try to set a smaller lr"
-        return nms_boxes, pred_vector
-
-
 class CoS_Det_Net(nn.Module):
     def __init__(self, cfg, draw_box=False):
         super(CoS_Det_Net, self).__init__()
@@ -331,7 +291,7 @@ class CoS_Det_Net(nn.Module):
                              backbone_path=cfg.MODEL.DETECTOR.PRETRAINED_PATH,
                              draw_box=draw_box)
         self.box_feat_dim = self.cfg.SOLVER.BOX_FEATURE_DIM
-        self.trans_encoder = TransformerEncoder(depth=4, emb_size=self.box_feat_dim )
+        self.trans_encoder = TransformerEncoder(depth=self.cfg.SOLVER.TRANSFORMER_LAYERS, emb_size=self.box_feat_dim )
         self.pos_e = PosEmbedding(cfg.DATA.MAX_NUM, self.box_feat_dim )
         self.fpn = FPN()
         self.score_Layer = ScoreLayer(256)
@@ -346,11 +306,11 @@ class CoS_Det_Net(nn.Module):
             nn.ReLU(True),
             nn.BatchNorm1d(self.box_feat_dim),
             nn.Dropout(),
-            nn.Linear(self.box_feat_dim, 1024),
+            nn.Linear(self.box_feat_dim, self.box_feat_dim),
             nn.ReLU(True),
-            nn.BatchNorm1d(1024),
+            nn.BatchNorm1d(self.box_feat_dim),
             nn.Dropout(),
-            nn.Linear(1024, 1),
+            nn.Linear(self.box_feat_dim, 1),
         )
         self.layerNorm = nn.BatchNorm1d(self.box_feat_dim)
 
