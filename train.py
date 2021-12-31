@@ -453,7 +453,7 @@ def main():
                              cfg.SOLVER.LR,
                              len(train_loader.dataset)))
 
-    cls_criterion = nn.BCEWithLogitsLoss(pos_weight = torch.Tensor([2]).cuda())
+    cls_criterion = nn.BCEWithLogitsLoss(pos_weight = torch.Tensor([cfg.SOLVER.CLS_POS_WEIGHT]).cuda())
     seg_criterion = nn.BCEWithLogitsLoss()
     # 86,109,998 parameters
     optimizer_classifier = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=0.0001)
