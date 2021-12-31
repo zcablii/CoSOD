@@ -98,10 +98,9 @@ class RPNet(nn.Module):
             box_features_ = self.model.roi_heads.pooler(features_, nms_boxes)
         if self.mode == 'train':
             self.model.train()
-        # features of all 1k candidates [n*1000, parameter.box_feat_dim,7,7]
-        box_features = self.model.roi_heads.res5(box_features_)
-        # [n*1000, parameter.box_feat_dim] need to mean this value
-        box_features = box_features.mean(dim=[2, 3])
+        
+        box_features = self.model.roi_heads.res5(box_features_)# features of all 1k candidates [n*1000, parameter.box_feat_dim,7,7]
+        box_features = box_features.mean(dim=[2, 3])# [n*1000, parameter.box_feat_dim] need to mean this value
         return nms_boxes, box_features, eachimg_selected_box_nums, activation
 
     # im1 = cv2.imread('./imgs/4.jpg')

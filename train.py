@@ -224,7 +224,7 @@ def train_seg(model, train_loader, epoch, optimizer, criterion):
 
 
 
-def train_joint(model, train_loader, epoch, optimizer, criterion):
+def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criterion):
     epoch_cls_loss = AverageMeter()
     epoch_seg_loss = AverageMeter()
     batch_time = AverageMeter()
@@ -267,9 +267,9 @@ def train_joint(model, train_loader, epoch, optimizer, criterion):
             # draw_gt_with_RPboxes(gt_imgs_boxes, gts, name='train_gts')
             draw_gt_with_RPboxes(pos_imgs_boxes,gts,'train_pred', gt_imgs_boxes,torch.round(torch.sigmoid(output_binary.detach())))
 
-        cls_loss = criterion(pred_vector, boxes_to_gts_list.unsqueeze(1))  # 1
+        cls_loss = cls_criterion(pred_vector, boxes_to_gts_list.unsqueeze(1))  # 1
         # cls_loss = criterion(pred_vector,boxes_to_gts_list)  # 2
-        seg_loss = criterion(output_binary.flatten(),gt_b_maps.flatten()) 
+        seg_loss = seg_criterion(output_binary.flatten(),gt_b_maps.flatten()) 
         loss = seg_loss+cls_loss
         loss.backward()
         optimizer.step()
@@ -309,12 +309,14 @@ def train_joint(model, train_loader, epoch, optimizer, criterion):
                          'acc: {2:.3f} -- '
                          'recall: {3:.3f} -- '
                          'precision: {4:.3f} -- '
-                         'ioa: {5:.3f} --'
-                         'seg loss: {6:.4f}'.format(epoch,
+                         'f1: {5:.3f} -- '
+                         'ioa: {6:.3f} --'
+                         'seg loss: {7:.4f}'.format(epoch,
                                                    epoch_cls_loss.avg,
                                                    epoch_correct_prd_num / epoch_total_objs_num,
                                                    epoch_true_p / epoch_tot_p,
                                                    epoch_true_p / epoch_tot_p_pred,
+                                                   2*(epoch_true_p / epoch_tot_p)*(epoch_true_p / epoch_tot_p_pred)/(epoch_true_p / epoch_tot_p+epoch_true_p / epoch_tot_p_pred),
                                                    epoch_ioa.avg,
                                                    epoch_seg_loss.avg))
 
@@ -413,6 +415,7 @@ def eval_model(model, eval_loader, epoch):
                      'Acc: {acc:.3f}\t-'
                      'Recall: {recall:.3f}\t-'
                      'Precision: {precision:.3f}\t-'
+                     'F1: {f1:.3f}\t-'
                      'IOA: {ioa.avg:.3f}-'
                      'MAE: {mae.avg:.3f}\t-'
                      'F: {f_measure.avg:.3f}\t-'
@@ -423,6 +426,7 @@ def eval_model(model, eval_loader, epoch):
                              acc=epoch_correct_prd_num / epoch_total_objs_num,
                              recall=epoch_true_p / epoch_tot_p,
                              precision=epoch_true_p / epoch_tot_p_pred,
+                             f1=2*(epoch_true_p / epoch_tot_p)*(epoch_true_p / epoch_tot_p_pred)/(epoch_true_p / epoch_tot_p+epoch_true_p / epoch_tot_p_pred),
                              ioa=epoch_ioa,
                              mae=mae,
                              f_measure=f_measure,
@@ -449,7 +453,8 @@ def main():
                              cfg.SOLVER.LR,
                              len(train_loader.dataset)))
 
-    criterion = nn.BCEWithLogitsLoss()
+    cls_criterion = nn.BCEWithLogitsLoss(pos_weight = torch.Tensor([2]).cuda())
+    seg_criterion = nn.BCEWithLogitsLoss()
     # 86,109,998 parameters
     optimizer_classifier = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=0.0001)
     optimizer_seg = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=0.0001)
@@ -462,7 +467,8 @@ def main():
                              train_loader=train_loader,
                              epoch=epoch,
                              optimizer=optimizer_joint,
-                             criterion=criterion)
+                             cls_criterion=cls_criterion,
+                             seg_criterion = seg_criterion)
             # train_seg(model=model,
             #           train_loader=train_loader,
             #           epoch=epoch,
