@@ -110,10 +110,11 @@ class TrainDataset(data.Dataset):
                 if sample_dataset_name == syn_name:
                     syn_types += ["origin"]
                     strategy = random.choice(syn_types)
-                    if strategy == "origin":
+                    if False: #strategy == "origin":
                         img_path = img_paths[idx]
                         gt_path = gt_paths[idx]
                     else:
+                        strategy = syn_types[0]
                         select_num = random.randint(1, strategy[2])
                         dir_ = img_paths[idx].split('/')[-2]
                         name = img_paths[idx].split('/')[-1][:-4] + strategy[1] + "{}.png".format(select_num)
