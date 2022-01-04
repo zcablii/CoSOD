@@ -30,7 +30,7 @@ setup_logger()
 # DetectionCheckpointer(model).load("R_101_C4.pkl")
 
 class RPNet(nn.Module):
-    def __init__(self, mode='train', backbone='R_101_C4', backbone_path='', draw_box=False):
+    def __init__(self, mode='train', backbone='R_101_C4', backbone_path='', draw_box=False, output_dim = 256):
         super(RPNet, self).__init__()
         self.mode = mode
         self.draw_box = draw_box
@@ -46,6 +46,17 @@ class RPNet(nn.Module):
         self.model = build_model(self.cfg)
         DetectionCheckpointer(self.model).load(backbone_path + backbone + ".pkl")
         self.model.eval()
+        del self.model.roi_heads.box_predictor
+        del self.model.roi_heads.mask_head
+        self.output_dim = output_dim
+        # self.box_feature_layer = nn.Sequential(
+        #     nn.Conv2d(2048, self.output_dim, kernel_size=7, stride=1, padding=0, bias=False),
+        #     nn.ReLU(True),
+        #     nn.BatchNorm1d(self.output_dim),
+        #     nn.Dropout(),
+        #     nn.Linear(self.output_dim, self.output_dim),
+        #     nn.BatchNorm1d(self.output_dim)
+        #     )
 
     def forward(self, image_Input):
 
@@ -86,41 +97,15 @@ class RPNet(nn.Module):
             # keep this list for box-image relation
             eachimg_selected_box_nums = [len(boxes) for boxes in nms_boxes]
 
-            # box_features_ = []
-            # for (img_boxes,feature_map) in zip(nms_boxes,features['res4']):
-            #     order = sort_boxes(img_boxes)
-            #     each_img_boxes_features = roi_cut(feature_map,img_boxes,order) # implement roi cut!
-            #     box_features_.append(each_img_boxes_features)
-            # box_features_=torch.cat(box_features_)
-            
-
             # [n,1024,14,14] pooler.py line ~220
             box_features_ = self.model.roi_heads.pooler(features_, nms_boxes)
         if self.mode == 'train':
             self.model.train()
         
-        box_features = self.model.roi_heads.res5(box_features_)# features of all 1k candidates [n*1000, parameter.box_feat_dim,7,7]
-        box_features = box_features.mean(dim=[2, 3])# [n*1000, parameter.box_feat_dim] need to mean this value
+        box_features = self.model.roi_heads.res5(box_features_)# features of all 1k candidates [n*1000, 2048,7,7]
+        # box_features = self.box_feature_layer(box_features)
+        box_features = box_features.mean(dim=[2, 3])# [n*1000, 2048] need to mean this value
         return nms_boxes, box_features, eachimg_selected_box_nums, activation
-
-    # im1 = cv2.imread('./imgs/4.jpg')
-    # image = im1
-    # height, width = image.shape[:2]
-    # image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
-
-    # # print(im1.shape,np.array(image.permute(1, 2, 0)).shape) #(426, 640, 3) (426, 640, 3)
-
-    # inputs = [{"image": image, "height": height, "width": width}]
-    # im2 = cv2.imread('./imgs/5.jpg')
-    # image = im2
-    # height, width = image.shape[:2]
-    # image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
-    # inputs.append({"image": image, "height": height, "width": width})
-    # im3 = cv2.imread('./imgs/1.jpg')
-    # image = im3
-    # height, width = image.shape[:2]
-    # image = torch.as_tensor(image.astype("float32").transpose(2, 0, 1))
-    # inputs.append({"image": image, "height": height, "width": width})
 
 
 class PosEmbedding(nn.Module):
@@ -177,7 +162,17 @@ class ResidualAdd(nn.Module):
         x += res
         return x
 
+class ResidualSub(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
 
+    def forward(self, x, **kwargs):
+        res = x
+        x = self.fn(x, **kwargs)
+        x -= res
+        return x
+    
 class FeedForwardBlock(nn.Sequential):
     def __init__(self, emb_size: int, expansion: int = 4, drop_p: float = 0.):
         super().__init__(
@@ -197,7 +192,7 @@ class TransformerEncoderBlock(nn.Sequential):
                  **kwargs):
         super().__init__(
             ResidualAdd(nn.Sequential(
-                nn.LayerNorm(emb_size),
+                # nn.LayerNorm(emb_size),
                 MultiHeadAttention(emb_size, **kwargs),
                 nn.Dropout(drop_p)
             )),
@@ -209,10 +204,31 @@ class TransformerEncoderBlock(nn.Sequential):
             )
             ))
 
+class TransformerEncoderFirstBlock(nn.Sequential):
+    def __init__(self,
+                 emb_size: int,
+                 drop_p: float = 0.,
+                 forward_expansion: int = 4,
+                 forward_drop_p: float = 0.,
+                 **kwargs):
+        super().__init__(
+            ResidualSub(nn.Sequential(
+                # nn.LayerNorm(emb_size),
+                MultiHeadAttention(emb_size, **kwargs),
+                nn.Dropout(drop_p)
+            )),
+            ResidualAdd(nn.Sequential(
+                nn.LayerNorm(emb_size),
+                FeedForwardBlock(
+                    emb_size, expansion=forward_expansion, drop_p=forward_drop_p),
+                nn.Dropout(drop_p)
+            )
+            ))
 
 class TransformerEncoder(nn.Sequential):
     def __init__(self, depth: int = 12, **kwargs):
-        super().__init__(*[TransformerEncoderBlock(**kwargs) for _ in range(depth)])
+        super().__init__(*([TransformerEncoderFirstBlock(**kwargs)]+[TransformerEncoderBlock(**kwargs) for _ in range(depth-1)]))   #1
+        # super().__init__(*[TransformerEncoderBlock(**kwargs) for _ in range(depth)])  #0
 
 
 class FPN(nn.Module):
@@ -285,13 +301,14 @@ class CoS_Det_Net(nn.Module):
     def __init__(self, cfg, draw_box=False):
         super(CoS_Det_Net, self).__init__()
         self.cfg = cfg
+        self.box_feat_dim = self.cfg.SOLVER.BOX_FEATURE_DIM
         self.det_net = RPNet(mode='train',
                              backbone=cfg.MODEL.DETECTOR.BACKBONE,
                              backbone_path=cfg.MODEL.DETECTOR.PRETRAINED_PATH,
-                             draw_box=draw_box)
-        self.box_feat_dim = self.cfg.SOLVER.BOX_FEATURE_DIM
-        self.trans_encoder = TransformerEncoder(depth=self.cfg.SOLVER.TRANSFORMER_LAYERS, emb_size=self.box_feat_dim )
+                             draw_box=draw_box,
+                             output_dim= self.box_feat_dim )
         self.pos_e = PosEmbedding(cfg.DATA.MAX_NUM, self.box_feat_dim )
+        self.trans_encoder = TransformerEncoder(depth=self.cfg.SOLVER.TRANSFORMER_LAYERS, emb_size=self.box_feat_dim )  # 0
         self.fpn = FPN()
         self.score_Layer = ScoreLayer(256)
         self.squeeze_features = nn.Sequential(
@@ -311,13 +328,19 @@ class CoS_Det_Net(nn.Module):
             nn.Dropout(),
             nn.Linear(self.box_feat_dim, 1),
         )
-        self.layerNorm = nn.BatchNorm1d(self.box_feat_dim)
+        self.layerNorm = nn.LayerNorm(self.box_feat_dim)
 
     def forward(self, images):
         nms_boxes, box_features, eachimg_selected_box_nums, activation = self.det_net(images)
         box_features = self.squeeze_features(box_features)
-        box_features = self.pos_e(eachimg_selected_box_nums, box_features)
-        att_features = self.trans_encoder(box_features.reshape(1, -1, self.box_feat_dim)).reshape(-1, self.box_feat_dim)
+        att_features = self.pos_e(eachimg_selected_box_nums, box_features) # 0
+        if self.cfg.SOLVER.POS_IN_EACH_LAYER:
+            for each_layer in self.trans_encoder: #1
+                att_features = self.layerNorm(att_features)#1
+                att_features = self.pos_e(eachimg_selected_box_nums, att_features)#1
+                att_features = each_layer(att_features.reshape(1, -1,  self.box_feat_dim)).reshape(-1,  self.box_feat_dim)#1
+        else:
+            att_features = self.trans_encoder(att_features.reshape(1, -1, self.box_feat_dim)).reshape(-1, self.box_feat_dim) # 0
         pred_vector = self.classifier(att_features)
         if math.isnan(pred_vector[0][0]):
             print("box_features: ", box_features)

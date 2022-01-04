@@ -410,7 +410,6 @@ def eval_model(model, eval_loader, epoch):
                 #                         s_measure=s_measure,
                 #                         auc=auc
                 #                         ))
-
     train_log_string('======\tValEpoch: {0}\t-'
                      'Acc: {acc:.3f}\t-'
                      'Recall: {recall:.3f}\t-'
@@ -418,10 +417,10 @@ def eval_model(model, eval_loader, epoch):
                      'F1: {f1:.3f}\t-'
                      'IOA: {ioa.avg:.3f}-'
                      'MAE: {mae.avg:.3f}\t-'
-                     'F: {f_measure.avg:.3f}\t-'
-                     'S: {s_measure.avg:.3f}\t-'
-                     'E: {e_measure.avg:.3f}\t-'
-                     'AUC: {auc.avg:.3f}'
+                    #  'F: {f_measure:.3f}\t-'
+                    #  'S: {s_measure:.3f}\t-'
+                    #  'E: {e_measure:.3f}\t-'
+                     'AUC: {auc:.3f}'
                      .format(epoch,
                              acc=epoch_correct_prd_num / epoch_total_objs_num,
                              recall=epoch_true_p / epoch_tot_p,
@@ -429,10 +428,10 @@ def eval_model(model, eval_loader, epoch):
                              f1=2*(epoch_true_p / epoch_tot_p)*(epoch_true_p / epoch_tot_p_pred)/(epoch_true_p / epoch_tot_p+epoch_true_p / epoch_tot_p_pred),
                              ioa=epoch_ioa,
                              mae=mae,
-                             f_measure=f_measure,
-                             e_measure=e_measure,
-                             s_measure=s_measure,
-                             auc=auc))
+                            #  f_measure=f_measure.avg.cpu().data.item(),
+                            #  e_measure=e_measure.avg.cpu().data.item(),
+                            #  s_measure=s_measure.avg.cpu().data.item(),
+                             auc=auc.avg))
 
 
 def main():

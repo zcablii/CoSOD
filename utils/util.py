@@ -195,7 +195,9 @@ def boxes_to_gt(imgs_boxes, gts_):
             # else:
             #     boxes_to_gt_list.append(1)
 
-            if box_gt_area / gt_area < 0.2 or box_gt_area / bbox_area < 0.2:
+            # if box_gt_area / gt_area < 0.2 or box_gt_area / bbox_area < 0.2:
+            if box_gt_area / gt_area < 0.3 or box_gt_area / bbox_area < 0.2:
+            # if box_gt_area/(gt_area+bbox_area-box_gt_area)<0.2:
                     boxes_to_gt_list.append(0)
             else:
                 boxes_to_gt_list.append(1)
@@ -205,7 +207,7 @@ def boxes_to_gt(imgs_boxes, gts_):
     return boxes_to_gts_list
 
 
-def boxes_gt_ioa(imgs_boxes, gts_, pred_vector, at_least_pred_one=True, draw_box=False):
+def boxes_gt_ioa(imgs_boxes, gts_, pred_vector, at_least_pred_one=True):
     gts = gts_.clone()  # size: [8, 1, 256, 256] 8 is image num
     pos_imgs_boxes = []
     gts_pos_area = []
