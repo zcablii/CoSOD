@@ -1,22 +1,20 @@
 import argparse
+import datetime
+import math
+import os
+import random
+import time
+import warnings
 
-from torch.autograd import Variable
-from torch import optim, nn
 import torch
+from torch import nn, optim
+from torch.autograd import Variable
 
-from utils.util import AverageMeter, boxes_to_gt, boxes_gt_ioa, binary_correct_pred_num, draw_gt_with_RPboxes, \
-    binary_after_boxes, boxes_preded, write_boxes_imgs
+from configs import cfg
 from dataset.dataset import get_loader
 from model import CoS_Det_Net
 from utils.evaluator import Evaluator
-from configs import cfg
-
-import datetime
-import math
-import time
-import os
-import random
-import warnings
+from utils.util import *
 
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -230,14 +228,14 @@ def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criteri
     batch_time = AverageMeter()
     data_time = AverageMeter()
     epoch_ioa = AverageMeter()
-    epoch_correct_prd_num = 0.0001
-    epoch_total_objs_num = 0.0001
-    epoch_tot_p = 0.0001
-    epoch_true_p = 0.0001
-    epoch_tot_p_pred = 0.0001
+    epoch_correct_prd_num = 0.
+    epoch_total_objs_num = 0.
+    epoch_tot_p = 0.
+    epoch_true_p = 0.
+    epoch_tot_p_pred = 0.
     end = time.time()
     max_iterate = math.ceil(len(train_loader.dataset) / cfg.DATA.BATCH_SIZE)
-    # typical total objs num: 15500, positive objs num: 7200
+    # typical total objs num: 15500, positive objs num: 2900
     for i, data_batch in enumerate(train_loader):
         draw_box = cfg.LOG.DRAW_BOX and i % cfg.LOG.DRAW_BOX_FREQ == 0
         if (i + 1) > max_iterate: break
@@ -329,15 +327,17 @@ def eval_model(model, eval_loader, epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     epoch_ioa = AverageMeter()
-    epoch_correct_prd_num = 0.0001
-    epoch_total_objs_num = 0.0001
-    epoch_tot_p = 0.0001
-    epoch_true_p = 0.0001
-    epoch_tot_p_pred = 0.0001
+    epoch_correct_prd_num = 0.
+    epoch_total_objs_num = 0.
+    epoch_tot_p = 0.
+    epoch_true_p = 0.
+    epoch_tot_p_pred = 0.
     end = time.time()
     model.eval()
     max_iterate = math.ceil(len(eval_loader.dataset) / cfg.DATA.BATCH_SIZE)
     plot_epoch = random.randint(0,len(eval_loader))
+
+    # Total object num: 10985.  Postive object num: 1898
     for i, data_batch in enumerate(eval_loader):
         if (i + 1) > max_iterate: break
         imgs_groups = Variable(data_batch[0].squeeze(0).cuda())
@@ -443,12 +443,10 @@ def main():
     model = CoS_Det_Net(cfg)
     model.cuda()
     train_log_string('Starting training:'
-                     '  Train steps: {}'
                      '  Batch size: {}'
                      '  Learning rate: {}'
                      '  Training set size: {}\n'
-                     .format(cfg.SOLVER.TRAIN_STEPS,
-                             cfg.DATA.BATCH_SIZE,
+                     .format(cfg.DATA.BATCH_SIZE,
                              cfg.SOLVER.LR,
                              len(train_loader.dataset)))
 
@@ -485,7 +483,7 @@ def main():
             iterate += len(train_loader)
         
         save_file = os.path.join(
-            check_point_dir, 'checkpoint_epoch{}.pth.tar'.format(cfg.SOLVER.MAX_EPOCHS))
+            check_point_dir, 'checkpoint_epoch{}.pth'.format(cfg.SOLVER.MAX_EPOCHS))
         save_checkpoint(
             {
                 'epoch': cfg.SOLVER.MAX_EPOCHS,
@@ -499,7 +497,7 @@ def main():
         print("Epoch:{} Save Done".format(cfg.SOLVER.MAX_EPOCHS))
 
 
-def save_checkpoint(state, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, filename='checkpoint.pth'):
     torch.save(state, filename)
 
 if __name__ == "__main__":

@@ -52,6 +52,7 @@ TEST:
   IMAGE_DIRS: ['Data/CoCA/image','Data/CoSOD3k/image','Data/CoSal2015/image']
   GT_DIRS: ['Data/gt/CoCA','Data/gt/CoSOD3k','Data/gt/CoSal2015']
   CHECKPOINT:  ""
+  SAVE_PATH: "Preds/DetN/"
 
 SOLVER:
   JOINT: True
@@ -59,8 +60,7 @@ SOLVER:
   LR: 0.0001
   LR_DECAY_GAMMA: 0.5
   DECAY_STEPS: 50
-  TRAIN_STEPS: 4000
   TRANSFORMER_LAYERS: 2
-  BOX_FEATURE_DIM: 256
+  BOX_FEATURE_DIM: 128
   CLS_POS_WEIGHT: 2
   POS_IN_EACH_LAYER: False

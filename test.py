@@ -1,20 +1,42 @@
 import torch.backends.cudnn as cudnn
 from torch.autograd import Variable
-from CoSOD.dataset import transforms as trans
 import time
-from parameter import *
-from CoSOD.dataset.dataset import get_loader
-from parameter import *
+from configs import cfg
+from dataset.dataset import *
+from model import CoS_Det_Net
+from utils.evaluator import Evaluator
+from utils.util import *
 from model import *
+import os
+import argparse
+
+parser = argparse.ArgumentParser(description='PyTorch SOD FOR CSNet')
+parser.add_argument(
+    "--config",
+    default="configs/cosal-joint-train.yml",
+    metavar="FILE",
+    help="path to config file",
+    type=str,
+)
+args = parser.parse_args()
+assert os.path.isfile(args.config)
+cfg.merge_from_file(args.config)
+
+if cfg.GPU.USE:
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in cfg.GPU.ID)
+
+if cfg.TASK == '':
+    cfg.TASK = cfg.MODEL.ARCH
 
 def test_net(model, batch_size):
 
-    for dataset_idx in range(len(test_dir_img)):
-        dataset_name = test_dir_img[dataset_idx].split('/')[-2]
+    for dataset_idx in range(len(cfg.TEST.IMAGE_DIRS)):
+        dataset_name = cfg.TEST.IMAGE_DIRS[dataset_idx].split('/')[-2]
 
-        print('testing {}'.format(test_dir_img[dataset_idx]))
+        print('testing {}'.format(cfg.TEST.IMAGE_DIRS[dataset_idx]))
 
-        test_loader = get_loader(test_dir_img[dataset_idx], img_size, 1, gt_root=None, mode='test', num_thread=1)
+        test_loader = get_loader(cfg.TEST.IMAGE_DIRS[dataset_idx], cfg.DATA.IMAGE_H, 1, gt_root=None, mode='test', num_thread=1)
         print('''
            Starting testing:
                Batch size: {}
@@ -32,26 +54,26 @@ def test_net(model, batch_size):
             # print(cos_imgs_groups.shape)
             # print(len(group_subpaths),group_subpaths[0])
             num = cos_imgs_groups.shape[0]
-            group_nums = num//max_num + (1 if num%max_num>0 else 0)
+            group_nums = num//cfg.DATA.MAX_NUM + (1 if num%cfg.DATA.MAX_NUM>0 else 0)
 
             batch_groups_paths = []
             batch_imgs = []
             batch_group_ori_sizes = []
             for i in range(group_nums-1):
-                batch_groups_paths.append(group_subpaths[i*max_num:(i+1)*max_num])
-                batch_imgs.append(cos_imgs_groups[i*max_num:(i+1)*max_num])
-                batch_group_ori_sizes.append(group_ori_sizes[i*max_num:(i+1)*max_num])
+                batch_groups_paths.append(group_subpaths[i*cfg.DATA.MAX_NUM:(i+1)*cfg.DATA.MAX_NUM])
+                batch_imgs.append(cos_imgs_groups[i*cfg.DATA.MAX_NUM:(i+1)*cfg.DATA.MAX_NUM])
+                batch_group_ori_sizes.append(group_ori_sizes[i*cfg.DATA.MAX_NUM:(i+1)*cfg.DATA.MAX_NUM])
 
-            batch_groups_paths.append(group_subpaths[-max_num:])
-            batch_imgs.append(cos_imgs_groups[-max_num:])
-            batch_group_ori_sizes.append(group_ori_sizes[-max_num:])
+            batch_groups_paths.append(group_subpaths[-cfg.DATA.MAX_NUM:])
+            batch_imgs.append(cos_imgs_groups[-cfg.DATA.MAX_NUM:])
+            batch_group_ori_sizes.append(group_ori_sizes[-cfg.DATA.MAX_NUM:])
 
             for group, subpaths,ori_sizes in zip(batch_imgs, batch_groups_paths,batch_group_ori_sizes):
                 # print(group.shape)
                 # print(len(subpaths))
                 inputs = []
                 for img in group:
-                    inputs.append({"image": img, "height": img_size, "width": img_size})
+                    inputs.append({"image": img, "height": cfg.DATA.IMAGE_H, "width": cfg.DATA.IMAGE_H})
 
                 nms_boxes,pred_vector,output_binary = model(inputs)  
                 output_binary = torch.round(torch.sigmoid(output_binary))
@@ -60,7 +82,7 @@ def test_net(model, batch_size):
                 output_binary = binary_after_boxes(output_binary, pos_imgs_boxes)
                 output = output_binary
                 # print(output)
-                saved_root = save_test_path_root + dataset_name
+                saved_root = cfg.TEST.SAVE_PATH + dataset_name
                 # save_final_path = saved_root + '/CADC_' + test_model + '/' + subpaths[0][0].split('/')[0] + '/'
                 save_final_path = saved_root + '/CADC/' + subpaths[0][0].split('/')[0] + '/'
                 os.makedirs(save_final_path, exist_ok=True)
@@ -83,17 +105,17 @@ def test_net(model, batch_size):
 
 if __name__ == '__main__':
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_id
     cudnn.benchmark = True
 
     start = time.time()
 
-    model = CoS_Det_Net()
+    model = CoS_Det_Net(cfg)
     model.cuda()
     print('Model has constructed!')
 
-    model.load_state_dict(torch.load(test_model_dir))
-    print('Model loaded from {}'.format(test_model_dir))
+    model.load_state_dict(torch.load("results/cosal-joint-train@DUTS_class/checkpoint_2022_01_05-13_17_42/checkpoint_epoch101.pth.tar")["state_dict"])
+    # print('Model loaded from {}'.format(test_model_dir))
 
     test_net(model, 1)
+    model.eval()
     print('total time {}'.format(time.time()-start))

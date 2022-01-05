@@ -70,7 +70,7 @@ _C.TEST.ROOT = ''
 _C.TEST.IMAGE_DIRS = []
 _C.TEST.GT_DIRS = []
 _C.TEST.CHECKPOINT = ''
-
+_C.TEST.SAVE_PATH= "Preds/DetN/"
 # # ---------------------------------------------------------------------------- #
 # # Solver
 # # ---------------------------------------------------------------------------- #
@@ -80,7 +80,6 @@ _C.SOLVER.MAX_EPOCHS = 300
 _C.SOLVER.LR = 0.0001
 _C.SOLVER.DECAY_STEPS = 50
 _C.SOLVER.LR_DECAY_GAMMA = 0.5
-_C.SOLVER.TRAIN_STEPS = 4000
 _C.SOLVER.TRANSFORMER_LAYERS = 4
 _C.SOLVER.BOX_FEATURE_DIM = 256
 _C.SOLVER.CLS_POS_WEIGHT = 1
