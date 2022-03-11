@@ -33,7 +33,7 @@ cfg.merge_from_file(args.config)
 
 if cfg.GPU.USE:
     os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in cfg.GPU.ID)
+    # os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in cfg.GPU.ID)
 
 if cfg.TASK == '':
     cfg.TASK = cfg.MODEL.ARCH
@@ -341,6 +341,7 @@ def eval_model(model, eval_loader, epoch):
     for i, data_batch in enumerate(eval_loader):
         if (i + 1) > max_iterate: break
         imgs_groups = Variable(data_batch[0].squeeze(0).cuda())
+        
         gt_groups = Variable(data_batch[1].squeeze(0).cuda())
         num = imgs_groups.shape[0]
         group_nums = num // cfg.DATA.MAX_NUM + (1 if num % cfg.DATA.MAX_NUM > 0 else 0)

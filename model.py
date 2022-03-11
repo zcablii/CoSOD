@@ -46,7 +46,7 @@ class RPNet(nn.Module):
         self.model = build_model(self.cfg)
         DetectionCheckpointer(self.model).load(backbone_path + backbone + ".pkl")
         self.model.eval()
-        del self.model.roi_heads.box_predictor
+        # del self.model.roi_heads.box_predictor
         del self.model.roi_heads.mask_head
         self.output_dim = output_dim
         self.feat_conv = nn.Conv2d(2048, self.output_dim, kernel_size=7, stride=1, padding=0, bias=False)
@@ -55,6 +55,14 @@ class RPNet(nn.Module):
             nn.BatchNorm1d(self.output_dim),
             nn.Dropout(),
             nn.Linear(self.output_dim, self.output_dim),
+            nn.BatchNorm1d(self.output_dim)
+            )
+
+        self.class_feature_layer = nn.Sequential(
+            nn.ReLU(True),
+            nn.BatchNorm1d(81),
+            nn.Dropout(),
+            nn.Linear(81, self.output_dim),
             nn.BatchNorm1d(self.output_dim)
             )
 
@@ -103,9 +111,13 @@ class RPNet(nn.Module):
             self.model.train()
         
         box_features = self.model.roi_heads.res5(box_features_)# features of all 1k candidates [n*1000, 2048,7,7]
-        # box_features = box_features.mean(dim=[2, 3])# [n*1000, 2048] need to mean this value
-        box_features = self.feat_conv(box_features).squeeze(dim=3).squeeze(dim=2)
-        box_features = self.box_feature_layer(box_features)
+        ## box_features = box_features.mean(dim=[2, 3])# [n*1000, 2048] need to mean this value
+        # box_features = self.feat_conv(box_features).squeeze(dim=3).squeeze(dim=2)
+        # box_features = self.box_feature_layer(box_features)
+        
+        predictions = self.model.roi_heads.box_predictor(box_features.mean(dim=[2, 3]))[0]
+        box_features = self.class_feature_layer(predictions)
+
         return nms_boxes, box_features, eachimg_selected_box_nums, activation
 
 
@@ -298,6 +310,62 @@ class ScoreLayer(nn.Module):
         return x
 
 
+class MultiHeadCrossSimilarity(nn.Module):
+    def __init__(self, emb_size: int, num_heads: int = 8, dropout: float = 0):
+        super().__init__()
+        self.emb_size = emb_size
+        self.num_heads = num_heads
+        self.qemb = nn.Linear(emb_size, emb_size)
+        self.kemb = nn.Linear(emb_size, emb_size)
+        self.att_drop = nn.Dropout(dropout)
+        self.sigmod = nn.Sigmoid()
+
+    def forward(self, eachimg_selected_box_nums, x: Tensor) -> Tensor:
+        q = self.qemb(x)[0] # shape 1,k,d
+        k = self.kemb(x)[0]
+        max_ = q.size(0) - 1
+        box_id = 0
+        matrs = []
+        querys = []
+        keys = []
+        for boxNum in eachimg_selected_box_nums:
+            this_qs = q[box_id:box_id+boxNum]
+            this_qs = rearrange(this_qs, "b (h d) -> b h d", h=2)
+            querys.append(this_qs)
+            this_ks = k[box_id:box_id+boxNum]
+            this_ks = rearrange(this_ks, "b (h d) -> b h d", h=2)
+            keys.append(this_ks)
+            box_id+=boxNum
+
+        for i, qs in enumerate(querys):
+            similarity_l = []
+            for j, ks in enumerate(keys):
+                if i==j:
+                    continue
+                similarity = torch.einsum('qhd, khd -> qhk', qs, ks)
+            
+                similarity_mean = similarity.mean(-1) 
+                similarity_max = similarity.max(-1)[0]
+                similarity_min = similarity.min(-1)[0]
+                similarity = torch.stack([similarity_mean,similarity_max,similarity_min])
+                
+                similarity_l.append(similarity) 
+           
+            similarity_l = torch.stack(similarity_l) #imgk * 3 * objq * h
+          
+            
+            avg_sim_matr = similarity_l.mean(0) # 3 * objq * h
+            max_sim_matr = similarity_l.max(0)[0]
+            min_sim_matr = similarity_l.min(0)[0]
+            matr = torch.stack([avg_sim_matr,max_sim_matr,min_sim_matr]) 
+            matr = rearrange(matr, 'n m o h -> o (n m h)', h = 2, n=3,m=3) # objq * (3*3*h)
+            matrs.append(matr) # 
+
+        matrs = torch.cat(matrs) # all objs * (3*3*h)
+
+        return matrs
+
+        
 class CoS_Det_Net(nn.Module):
     def __init__(self, cfg, draw_box=False):
         super(CoS_Det_Net, self).__init__()
@@ -309,7 +377,8 @@ class CoS_Det_Net(nn.Module):
                              draw_box=draw_box,
                              output_dim= self.box_feat_dim )
         self.pos_e = PosEmbedding(cfg.DATA.MAX_NUM, self.box_feat_dim )
-        self.trans_encoder = TransformerEncoder(depth=self.cfg.SOLVER.TRANSFORMER_LAYERS, emb_size=self.box_feat_dim )  # 0
+        # self.trans_encoder = TransformerEncoder(depth=self.cfg.SOLVER.TRANSFORMER_LAYERS, emb_size=self.box_feat_dim )  # 0
+        self.xatt = MultiHeadCrossSimilarity(self.box_feat_dim)
         self.fpn = FPN()
         self.score_Layer = ScoreLayer(256)
         # self.squeeze_features = nn.Sequential(
@@ -327,7 +396,15 @@ class CoS_Det_Net(nn.Module):
             nn.ReLU(True),
             nn.BatchNorm1d(self.box_feat_dim),
             nn.Dropout(),
-            nn.Linear(self.box_feat_dim, 1),
+            nn.Linear(self.box_feat_dim, 1)
+        )
+
+        self.xatt_classifier = nn.Sequential(
+            nn.Linear(18, 18),
+            nn.ReLU(True),
+            nn.BatchNorm1d(18),
+            nn.Dropout(),
+            nn.Linear(18, 1)
         )
         self.layerNorm = nn.LayerNorm(self.box_feat_dim)
 
@@ -341,8 +418,8 @@ class CoS_Det_Net(nn.Module):
                 att_features = self.pos_e(eachimg_selected_box_nums, att_features)#1
                 att_features = each_layer(att_features.reshape(1, -1,  self.box_feat_dim)).reshape(-1,  self.box_feat_dim)#1
         else:
-            att_features = self.trans_encoder(att_features.reshape(1, -1, self.box_feat_dim)).reshape(-1, self.box_feat_dim) # 0
-        pred_vector = self.classifier(att_features)
+            att_features = self.xatt(eachimg_selected_box_nums,att_features.reshape(1, -1, self.box_feat_dim))
+        pred_vector = self.xatt_classifier(att_features)
         if math.isnan(pred_vector[0][0]):
             print("box_features: ", box_features)
             print("att_features: ", att_features)
@@ -355,3 +432,4 @@ class CoS_Det_Net(nn.Module):
         bmap = self.score_Layer(p2, images, x_size=[256, 256])
 
         return nms_boxes, pred_vector, bmap
+

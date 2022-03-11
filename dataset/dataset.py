@@ -7,7 +7,7 @@ from PIL import Image
 import random
 import os
 
-
+torch.multiprocessing.set_sharing_strategy('file_system')
 class TrainDataset(data.Dataset):
     def __init__(self, cfg):
         # Path Pool
@@ -239,7 +239,7 @@ def get_loader(cfg, mode='train'):
                                    pin_memory=cfg.DATA.PIN)
         else:
             data_loaders = []
-            for test_image_dir, test_gt_dir in zip(cfg.TEST.IMAGE_DIRS, cfg.GT_DIRS):
+            for test_image_dir, test_gt_dir in zip(cfg.TEST.IMAGE_DIRS, cfg.TEST.GT_DIRS):
                 dataset = TestDataset(cfg,
                                       cfg.TEST.ROOT,
                                       test_image_dir,
