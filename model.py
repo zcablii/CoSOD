@@ -9,30 +9,24 @@ from detectron2 import model_zoo
 import matplotlib.pyplot as plt
 import numpy as np
 # from skimage.transform import resize
-
 # import some common libraries
 import torch.nn.functional as F
 from torch import Tensor
 import torch.nn as nn
 import torch
-
 from einops import rearrange
 import math
-
 from torchvision.ops import nms
-
 from utils.util import filter_boxes_by_prob, write_boxes_imgs
 
 setup_logger()
-
 
 # mask_rcnn_R_101_C4_3x.yaml
 # DetectionCheckpointer(model).load("R_101_C4.pkl")
 
 class RPNet(nn.Module):
-    def __init__(self, mode='train', backbone='R_101_C4', backbone_path='', draw_box=False, output_dim = 256):
+    def __init__(self, backbone='R_101_C4', backbone_path='', draw_box=False, output_dim = 256):
         super(RPNet, self).__init__()
-        self.mode = mode
         self.draw_box = draw_box
         self.cfg = get_cfg()
         # add project-specific config (e.g., TensorMask) here if you're not running a model in detectron2's core library
@@ -52,10 +46,13 @@ class RPNet(nn.Module):
         self.feat_conv = nn.Conv2d(2048, self.output_dim, kernel_size=7, stride=1, padding=0, bias=False)
         self.box_feature_layer = nn.Sequential(
             nn.ReLU(True),
-            nn.BatchNorm1d(self.output_dim),
+            nn.BatchNorm1d(2048),
             nn.Dropout(),
-            nn.Linear(self.output_dim, self.output_dim),
-            nn.BatchNorm1d(self.output_dim)
+            nn.Linear(2048, 2048),
+            nn.ReLU(True),
+            nn.BatchNorm1d(2048),
+            nn.Dropout(),
+            nn.Linear(2048, self.output_dim),
             )
 
         self.class_feature_layer = nn.Sequential(
@@ -66,7 +63,7 @@ class RPNet(nn.Module):
             nn.BatchNorm1d(self.output_dim)
             )
 
-    def forward(self, image_Input):
+    def forward(self, image_Input, mode='train'):
 
         def get_activation(name):
             def hook(model, input, output):
@@ -107,16 +104,16 @@ class RPNet(nn.Module):
 
             # [n,1024,14,14] pooler.py line ~220
             box_features_ = self.model.roi_heads.pooler(features_, nms_boxes)
-        if self.mode == 'train':
+        if mode == 'train':
             self.model.train()
         
         box_features = self.model.roi_heads.res5(box_features_)# features of all 1k candidates [n*1000, 2048,7,7]
-        ## box_features = box_features.mean(dim=[2, 3])# [n*1000, 2048] need to mean this value
+        box_features = box_features.mean(dim=[2, 3])# [n*1000, 2048] need to mean this value
         # box_features = self.feat_conv(box_features).squeeze(dim=3).squeeze(dim=2)
-        # box_features = self.box_feature_layer(box_features)
+        box_features = self.box_feature_layer(box_features)
         
-        predictions = self.model.roi_heads.box_predictor(box_features.mean(dim=[2, 3]))[0]
-        box_features = self.class_feature_layer(predictions)
+        # predictions = self.model.roi_heads.box_predictor(box_features.mean(dim=[2, 3]))[0]
+        # box_features = self.class_feature_layer(predictions)
 
         return nms_boxes, box_features, eachimg_selected_box_nums, activation
 
@@ -132,7 +129,7 @@ class PosEmbedding(nn.Module):
     def forward(self, eachimg_selected_box_nums, box_features: Tensor) -> Tensor:
         inds = 0
         for ind, i in enumerate(eachimg_selected_box_nums):
-            box_features[inds:i + inds] = box_features[inds:i + inds]/i + self.positions[ind]
+            box_features[inds:i + inds] = box_features[inds:i + inds]/i# + self.positions[ind]
             inds += i
         return box_features
 
@@ -323,7 +320,6 @@ class MultiHeadCrossSimilarity(nn.Module):
     def forward(self, eachimg_selected_box_nums, x: Tensor) -> Tensor:
         q = self.qemb(x)[0] # shape 1,k,d
         k = self.kemb(x)[0]
-        max_ = q.size(0) - 1
         box_id = 0
         matrs = []
         querys = []
@@ -331,9 +327,11 @@ class MultiHeadCrossSimilarity(nn.Module):
         for boxNum in eachimg_selected_box_nums:
             this_qs = q[box_id:box_id+boxNum]
             this_qs = rearrange(this_qs, "b (h d) -> b h d", h=2)
+            this_qs = F.softmax(this_qs, dim=-1)
             querys.append(this_qs)
             this_ks = k[box_id:box_id+boxNum]
             this_ks = rearrange(this_ks, "b (h d) -> b h d", h=2)
+            this_ks = F.softmax(this_ks, dim=-1)
             keys.append(this_ks)
             box_id+=boxNum
 
@@ -365,14 +363,13 @@ class MultiHeadCrossSimilarity(nn.Module):
 
         return matrs
 
-        
+
 class CoS_Det_Net(nn.Module):
     def __init__(self, cfg, draw_box=False):
         super(CoS_Det_Net, self).__init__()
         self.cfg = cfg
         self.box_feat_dim = self.cfg.SOLVER.BOX_FEATURE_DIM
-        self.det_net = RPNet(mode='train',
-                             backbone=cfg.MODEL.DETECTOR.BACKBONE,
+        self.det_net = RPNet(backbone=cfg.MODEL.DETECTOR.BACKBONE,
                              backbone_path=cfg.MODEL.DETECTOR.PRETRAINED_PATH,
                              draw_box=draw_box,
                              output_dim= self.box_feat_dim )
@@ -404,12 +401,16 @@ class CoS_Det_Net(nn.Module):
             nn.ReLU(True),
             nn.BatchNorm1d(18),
             nn.Dropout(),
+            nn.Linear(18, 18),
+            nn.ReLU(True),
+            nn.BatchNorm1d(18),
+            nn.Dropout(),
             nn.Linear(18, 1)
         )
         self.layerNorm = nn.LayerNorm(self.box_feat_dim)
 
-    def forward(self, images):
-        nms_boxes, box_features, eachimg_selected_box_nums, activation = self.det_net(images)
+    def forward(self, images, mode='train'):
+        nms_boxes, box_features, eachimg_selected_box_nums, activation = self.det_net(images,mode)
         # box_features = self.squeeze_features(box_features)
         att_features = self.pos_e(eachimg_selected_box_nums, box_features) # 0
         if self.cfg.SOLVER.POS_IN_EACH_LAYER:

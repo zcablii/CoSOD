@@ -3,6 +3,7 @@ import datetime
 import math
 import os
 import random
+from statistics import mode
 import time
 import warnings
 
@@ -357,7 +358,7 @@ def eval_model(model, eval_loader, epoch):
             for img in imgs:
                 inputs.append({"image": img, "height": cfg.DATA.IMAGE_H, "width": cfg.DATA.IMAGE_W})
             with torch.no_grad():
-                nms_boxes, pred_vector, output_binary = model(inputs)
+                nms_boxes, pred_vector, output_binary = model(inputs,mode='eval')
                 boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts), [])
                 boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).float().cuda()  # 1
                 obj_num = len(pred_vector)
@@ -453,7 +454,6 @@ def main():
 
     cls_criterion = nn.BCEWithLogitsLoss(pos_weight = torch.Tensor([cfg.SOLVER.CLS_POS_WEIGHT]).cuda())
     seg_criterion = nn.BCEWithLogitsLoss()
-    # 86,109,998 parameters
     optimizer_classifier = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=0.0001)
     optimizer_seg = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=0.0001)
     optimizer_joint = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=0.0001)

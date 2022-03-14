@@ -48,8 +48,8 @@ def test_net(model, batch_size):
             if (i + 1) > iter_num: break
 
             cos_imgs_groups = Variable(data_batch[0].squeeze(0).cuda())
-            group_subpaths = data_batch[1]
-            group_ori_sizes = data_batch[2]
+            group_subpaths = data_batch[2]
+            group_ori_sizes = data_batch[3]
 
             # print(cos_imgs_groups.shape)
             # print(len(group_subpaths),group_subpaths[0])
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     model.cuda()
     print('Model has constructed!')
 
-    model.load_state_dict(torch.load("results/cosal-joint-train@DUTS_class/checkpoint_2022_01_05-17_21_32/checkpoint_epoch101.pth")["state_dict"])
+    model.load_state_dict(torch.load("results/cosal-joint-train@DUTS_class/checkpoint_2022_03_14-08_16_48/checkpoint_epoch16.pth")["state_dict"])
     # print('Model loaded from {}'.format(test_model_dir))
 
     test_net(model, 1)
