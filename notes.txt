@@ -32,8 +32,15 @@ Code phase 3: Joint training & inference
 3. Inference!
 
 
+SOTA:
+            CoCA : 0.104 mae || 0.548 max-fm ||  mean-fm ||  max-Emeasure || 0.744 mean-Emeasure || 0.681 S-measure || 0.2985 AP || 0.7053 AUC.
+            CoSOD3k : 0.078 mae || 0.759 max-fm || mean-fm|| max-Emeasure || 0.840 mean-Emeasure || 0.801 S-measure || 0.5804 AP || 0.8013 AUC.
+            CoSal2015: 0.058 mae || 0.862 max-fm || mean-fm||max-Emeasure || 0.906 mean-Emeasure || 0.866 S-measure || 0.6737 AP || 0.8353 AUC.
 
-Benchmark1: CoCA (DetN): 0.1653 mae || 0.3982 max-fm || 0.3959 mean-fm || 0.6525 max-Emeasure || 0.6461 mean-Emeasure || 0.5797 S-measure || 0.2985 AP || 0.7053 AUC.
+
+
+Benchmark1: cross attention 
+            CoCA (DetN): 0.1653 mae || 0.3982 max-fm || 0.3959 mean-fm || 0.6525 max-Emeasure || 0.6461 mean-Emeasure || 0.5797 S-measure || 0.2985 AP || 0.7053 AUC.
             CoSOD3k (DetN): 0.1178 mae || 0.6683 max-fm || 0.6655 mean-fm || 0.7719 max-Emeasure || 0.7691 mean-Emeasure || 0.7193 S-measure || 0.5804 AP || 0.8013 AUC.
             CoSal2015 (DetN): 0.0989 mae || 0.7476 max-fm || 0.7446 mean-fm || 0.8230 max-Emeasure || 0.8193 mean-Emeasure || 0.7693 S-measure || 0.6737 AP || 0.8353 AUC.
 

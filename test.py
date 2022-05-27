@@ -74,7 +74,7 @@ def test_net(model, batch_size):
                 for img in group:
                     inputs.append({"image": img, "height": cfg.DATA.IMAGE_H, "width": cfg.DATA.IMAGE_H})
 
-                nms_boxes,pred_vector,output_binary = model(inputs)  
+                nms_boxes,pred_vector,output_binary,_ = model(inputs)  
                 output_binary = torch.round(torch.sigmoid(output_binary))
                 pos_imgs_boxes = boxes_preded(nms_boxes,pred_vector)
 
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     model.cuda()
     print('Model has constructed!')
 
-    model.load_state_dict(torch.load("results/cosal-joint-train@DUTS_class/checkpoint_2022_03_14-08_16_48/checkpoint_epoch16.pth")["state_dict"])
+    model.load_state_dict(torch.load("results/cosal-joint-train@DUTS_class/checkpoint_2022_03_14-20_11_34/checkpoint_epoch101.pth")["state_dict"])
     # print('Model loaded from {}'.format(test_model_dir))
 
     test_net(model, 1)

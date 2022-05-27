@@ -228,15 +228,18 @@ def get_loader(cfg, mode='train'):
 
     else:
         if mode == "eval":
-            dataset = TestDataset(cfg,
-                                  cfg.VAL.ROOT,
-                                  cfg.VAL.IMAGE_DIR,
-                                  cfg.VAL.GT_DIR)
-            return data.DataLoader(dataset=dataset,
-                                   batch_size=cfg.DATA.BATCH_SIZE,
-                                   shuffle=False,
-                                   num_workers=cfg.DATA.WORKERS,
-                                   pin_memory=cfg.DATA.PIN)
+            data_loaders = []
+            for test_image_dir, test_gt_dir in zip(cfg.VAL.IMAGE_DIRS, cfg.VAL.GT_DIRS):
+                dataset = TestDataset(cfg,
+                                      cfg.VAL.ROOT,
+                                      test_image_dir,
+                                      test_gt_dir)
+                data_loaders.append(data.DataLoader(dataset=dataset,
+                                                    batch_size=cfg.DATA.BATCH_SIZE,
+                                                    shuffle=False,
+                                                    num_workers=cfg.DATA.WORKERS,
+                                                    pin_memory=cfg.DATA.PIN))
+            return data_loaders
         else:
             data_loaders = []
             for test_image_dir, test_gt_dir in zip(cfg.TEST.IMAGE_DIRS, cfg.TEST.GT_DIRS):

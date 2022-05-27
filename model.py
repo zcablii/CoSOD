@@ -1,4 +1,5 @@
 # import some common detectron2 utilities
+from turtle import forward
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.utils.logger import setup_logger
 from detectron2.modeling import build_model
@@ -17,7 +18,7 @@ import torch
 from einops import rearrange
 import math
 from torchvision.ops import nms
-from utils.util import filter_boxes_by_prob, write_boxes_imgs
+from utils.util import *
 
 setup_logger()
 
@@ -48,11 +49,11 @@ class RPNet(nn.Module):
             nn.ReLU(True),
             nn.BatchNorm1d(2048),
             nn.Dropout(),
-            nn.Linear(2048, 2048),
+            nn.Linear(2048, 1024),
             nn.ReLU(True),
-            nn.BatchNorm1d(2048),
+            nn.BatchNorm1d(1024),
             nn.Dropout(),
-            nn.Linear(2048, self.output_dim),
+            nn.Linear(1024, self.output_dim),
             )
 
         self.class_feature_layer = nn.Sequential(
@@ -136,7 +137,7 @@ class PosEmbedding(nn.Module):
 
 # towardsdatascience.com/a-detailed-guide-to-pytorchs-nn-transformer-module-c80afbc9ffb1
 class MultiHeadAttention(nn.Module):
-    def __init__(self, emb_size: int, num_heads: int = 8, dropout: float = 0):
+    def __init__(self, emb_size: int, num_heads: int = 8, dropout: float = 0.5):
         super().__init__()
         self.emb_size = emb_size
         self.num_heads = num_heads
@@ -184,7 +185,7 @@ class ResidualSub(nn.Module):
         return x
     
 class FeedForwardBlock(nn.Sequential):
-    def __init__(self, emb_size: int, expansion: int = 4, drop_p: float = 0.):
+    def __init__(self, emb_size: int, expansion: int = 4, drop_p: float = 0.5):
         super().__init__(
             nn.Linear(emb_size, expansion * emb_size),
             nn.GELU(),
@@ -196,9 +197,9 @@ class FeedForwardBlock(nn.Sequential):
 class TransformerEncoderBlock(nn.Sequential):
     def __init__(self,
                  emb_size: int,
-                 drop_p: float = 0.,
+                 drop_p: float = 0.5,
                  forward_expansion: int = 4,
-                 forward_drop_p: float = 0.,
+                 forward_drop_p: float = 0.5,
                  **kwargs):
         super().__init__(
             ResidualAdd(nn.Sequential(
@@ -217,9 +218,9 @@ class TransformerEncoderBlock(nn.Sequential):
 class TransformerEncoderFirstBlock(nn.Sequential):
     def __init__(self,
                  emb_size: int,
-                 drop_p: float = 0.,
+                 drop_p: float = 0.5,
                  forward_expansion: int = 4,
-                 forward_drop_p: float = 0.,
+                 forward_drop_p: float = 0.5,
                  **kwargs):
         super().__init__(
             ResidualSub(nn.Sequential(
@@ -306,9 +307,8 @@ class ScoreLayer(nn.Module):
             x = F.interpolate(x, x_size, mode='bilinear', align_corners=True)
         return x
 
-
 class MultiHeadCrossSimilarity(nn.Module):
-    def __init__(self, emb_size: int, num_heads: int = 8, dropout: float = 0):
+    def __init__(self, emb_size: int, num_heads: int = 8, dropout: float = 0.5):
         super().__init__()
         self.emb_size = emb_size
         self.num_heads = num_heads
@@ -318,19 +318,19 @@ class MultiHeadCrossSimilarity(nn.Module):
         self.sigmod = nn.Sigmoid()
 
     def forward(self, eachimg_selected_box_nums, x: Tensor) -> Tensor:
-        q = self.qemb(x)[0] # shape 1,k,d
-        k = self.kemb(x)[0]
+        q = self.qemb(x)[0]  # shape k,d
+        q = rearrange(q, "b (h d) -> b h d", h=self.num_heads)
+        k = self.kemb(x)[0] 
+        k = rearrange(k, "b (h d) -> b h d", h=self.num_heads)
         box_id = 0
         matrs = []
         querys = []
         keys = []
         for boxNum in eachimg_selected_box_nums:
             this_qs = q[box_id:box_id+boxNum]
-            this_qs = rearrange(this_qs, "b (h d) -> b h d", h=2)
             this_qs = F.softmax(this_qs, dim=-1)
             querys.append(this_qs)
             this_ks = k[box_id:box_id+boxNum]
-            this_ks = rearrange(this_ks, "b (h d) -> b h d", h=2)
             this_ks = F.softmax(this_ks, dim=-1)
             keys.append(this_ks)
             box_id+=boxNum
@@ -356,12 +356,31 @@ class MultiHeadCrossSimilarity(nn.Module):
             max_sim_matr = similarity_l.max(0)[0]
             min_sim_matr = similarity_l.min(0)[0]
             matr = torch.stack([avg_sim_matr,max_sim_matr,min_sim_matr]) 
-            matr = rearrange(matr, 'n m o h -> o (n m h)', h = 2, n=3,m=3) # objq * (3*3*h)
+            matr = rearrange(matr, 'n m o h -> o (n m h)', h = self.num_heads, n=3,m=3) # objq * (3*3*h)
             matrs.append(matr) # 
 
         matrs = torch.cat(matrs) # all objs * (3*3*h)
 
         return matrs
+
+class CoSal_classifiers(nn.Module):
+    def __init__(self, box_feat_dim):
+        super().__init__()
+        self.classifier = nn.Sequential(
+            nn.Linear(box_feat_dim, box_feat_dim),
+            nn.ReLU(True),
+            nn.BatchNorm1d(box_feat_dim),
+            nn.Dropout(),
+            nn.Linear(box_feat_dim, box_feat_dim),
+            nn.ReLU(True),
+            nn.BatchNorm1d(box_feat_dim),
+            nn.Dropout(),
+            nn.Linear(box_feat_dim, 1)
+        )
+
+    def forward(self, x):
+        x = self.classifier(x)
+        return x
 
 
 class CoS_Det_Net(nn.Module):
@@ -374,8 +393,8 @@ class CoS_Det_Net(nn.Module):
                              draw_box=draw_box,
                              output_dim= self.box_feat_dim )
         self.pos_e = PosEmbedding(cfg.DATA.MAX_NUM, self.box_feat_dim )
-        # self.trans_encoder = TransformerEncoder(depth=self.cfg.SOLVER.TRANSFORMER_LAYERS, emb_size=self.box_feat_dim )  # 0
-        self.xatt = MultiHeadCrossSimilarity(self.box_feat_dim)
+        self.trans_encoder = TransformerEncoder(depth=self.cfg.SOLVER.TRANSFORMER_LAYERS, emb_size=self.box_feat_dim )  # transformer
+        # self.xatt = MultiHeadCrossSimilarity(self.box_feat_dim, num_heads=cfg.SOLVER.ATTENTION_HEADS) # xattention
         self.fpn = FPN()
         self.score_Layer = ScoreLayer(256)
         # self.squeeze_features = nn.Sequential(
@@ -397,30 +416,44 @@ class CoS_Det_Net(nn.Module):
         )
 
         self.xatt_classifier = nn.Sequential(
-            nn.Linear(18, 18),
+            nn.Linear(cfg.SOLVER.ATTENTION_HEADS*9, cfg.SOLVER.ATTENTION_HEADS*9),
             nn.ReLU(True),
-            nn.BatchNorm1d(18),
+            nn.BatchNorm1d(cfg.SOLVER.ATTENTION_HEADS*9),
             nn.Dropout(),
-            nn.Linear(18, 18),
+            nn.Linear(cfg.SOLVER.ATTENTION_HEADS*9, cfg.SOLVER.ATTENTION_HEADS*9),
             nn.ReLU(True),
-            nn.BatchNorm1d(18),
+            nn.BatchNorm1d(cfg.SOLVER.ATTENTION_HEADS*9),
             nn.Dropout(),
-            nn.Linear(18, 1)
+            nn.Linear(cfg.SOLVER.ATTENTION_HEADS*9, 1)
         )
         self.layerNorm = nn.LayerNorm(self.box_feat_dim)
 
     def forward(self, images, mode='train'):
-        nms_boxes, box_features, eachimg_selected_box_nums, activation = self.det_net(images,mode)
+        nms_boxes, box_features_, eachimg_selected_box_nums, activation = self.det_net(images,mode)
         # box_features = self.squeeze_features(box_features)
-        att_features = self.pos_e(eachimg_selected_box_nums, box_features) # 0
+        # att_features_ = self.pos_e(eachimg_selected_box_nums, box_features_) # 0
+        att_features_ = box_features_
         if self.cfg.SOLVER.POS_IN_EACH_LAYER:
             for each_layer in self.trans_encoder: #1
-                att_features = self.layerNorm(att_features)#1
+                att_features = self.layerNorm(att_features_)#1
                 att_features = self.pos_e(eachimg_selected_box_nums, att_features)#1
                 att_features = each_layer(att_features.reshape(1, -1,  self.box_feat_dim)).reshape(-1,  self.box_feat_dim)#1
         else:
-            att_features = self.xatt(eachimg_selected_box_nums,att_features.reshape(1, -1, self.box_feat_dim))
-        pred_vector = self.xatt_classifier(att_features)
+            att_features = self.trans_encoder(att_features_.reshape(1, -1, self.box_feat_dim)).reshape(-1, self.box_feat_dim) # transformer
+            # att_features= self.xatt(eachimg_selected_box_nums,att_features_.reshape(1, -1, self.box_feat_dim)) # xattention
+
+            # side supervise
+            # att_features = []
+            # att_f= att_features_.reshape(1, -1, self.box_feat_dim)
+            # for each in self.trans_encoder:
+            #     att_f = each(att_f)
+            #     att_features.append(att_f.reshape(-1, self.box_feat_dim))
+
+        # classifiers = [CoSal_classifiers(self.box_feat_dim).cuda() for i in range(3)] # side supervise
+        # pred_vector = [classifiers[i](att_features[self.cfg.SOLVER.TRANSFORMER_LAYERS-3+i]) for i in range(3)] # side supervise
+
+        pred_vector = self.classifier(att_features) # transformer
+        # pred_vector = self.xatt_classifier(att_features) # xattention
         if math.isnan(pred_vector[0][0]):
             print("box_features: ", box_features)
             print("att_features: ", att_features)
@@ -432,5 +465,5 @@ class CoS_Det_Net(nn.Module):
 
         bmap = self.score_Layer(p2, images, x_size=[256, 256])
 
-        return nms_boxes, pred_vector, bmap
+        return nms_boxes, pred_vector, bmap, att_features_
 

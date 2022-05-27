@@ -13,7 +13,7 @@ from torch.autograd import Variable
 
 from configs import cfg
 from dataset.dataset import get_loader
-from model import CoS_Det_Net
+from model import *
 from utils.evaluator import Evaluator
 from utils.util import *
 
@@ -221,14 +221,48 @@ def train_seg(model, train_loader, epoch, optimizer, criterion):
                          'loss: {1:.4f}'.format(epoch,
                                                 epoch_loss.avg))
 
+def pre_train(model, train_loader, epoch, optimizer,mode='train'):
+    epoch_cls_loss = AverageMeter()
+    max_iterate = math.ceil(len(train_loader.dataset) / cfg.DATA.BATCH_SIZE)
+    # typical total objs num: 15500, positive objs num: 2900
+    for i, data_batch in enumerate(train_loader):
+        draw_box = cfg.LOG.DRAW_BOX and i % cfg.LOG.DRAW_BOX_FREQ == 0
+        if (i + 1) > max_iterate: break
+        cos_imgs_set = Variable(data_batch[0].squeeze(0).cuda())
+        gts = Variable(data_batch[1].squeeze(0).cuda())
+
+        images = []
+        for img in cos_imgs_set:
+            images.append({"image": img,
+                           "height": cfg.DATA.IMAGE_H,
+                           "width": cfg.DATA.IMAGE_W})
+
+        optimizer.zero_grad()
+        nms_boxes,pred_vector,output_binary,q = model(images, mode) 
+        boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts), []) # 1d list
+        # print(boxes_to_gts_list)
+        boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).float().cuda()  # 1  # 1d tensor
+      
+        infNCE_loss = loss_for_infNCE(boxes_to_gts_list, q)
+       
+        loss = infNCE_loss
+        # print(seg_loss,cls_loss,infNCE_loss)
+        loss.backward()
+        optimizer.step()
+        epoch_cls_loss.update(infNCE_loss.cpu().data.item())
+    if (epoch + 1) % cfg.LOG.EPOCH_FREQ == 0 or epoch==0:
+        train_log_string('epoch: {0:d} ----- '
+                        'cls loss: {1:.4f} -- '.format(epoch,
+                                                epoch_cls_loss.avg))
 
 
-def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criterion):
+def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criterion,mode='train'):
     epoch_cls_loss = AverageMeter()
     epoch_seg_loss = AverageMeter()
     batch_time = AverageMeter()
     data_time = AverageMeter()
     epoch_ioa = AverageMeter()
+    epoch_mae = AverageMeter()
     epoch_correct_prd_num = 0.
     epoch_total_objs_num = 0.
     epoch_tot_p = 0.
@@ -237,6 +271,10 @@ def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criteri
     end = time.time()
     max_iterate = math.ceil(len(train_loader.dataset) / cfg.DATA.BATCH_SIZE)
     # typical total objs num: 15500, positive objs num: 2900
+
+
+    # print("Pre train + joint train(without contrastive learning)")
+
     for i, data_batch in enumerate(train_loader):
         draw_box = cfg.LOG.DRAW_BOX and i % cfg.LOG.DRAW_BOX_FREQ == 0
         if (i + 1) > max_iterate: break
@@ -251,11 +289,13 @@ def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criteri
                            "width": cfg.DATA.IMAGE_W})
 
         optimizer.zero_grad()
-        nms_boxes,pred_vector,output_binary = model(images) 
-        boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts), [])
+        nms_boxes,pred_vector,output_binary,q = model(images,mode) 
+        boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts), []) # 1d list
         # print(boxes_to_gts_list)
-        boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).float().cuda()  # 1
+        boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).float().cuda()  # 1  # 1d tensor
         # boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).long().cuda() # 2
+        # cls_loss = sum([cls_criterion(pred_v, boxes_to_gts_list.unsqueeze(1)) for pred_v in pred_vector])/len(pred_vector)
+        # pred_vector = sum(pred_vector,0)
         pos_imgs_boxes,gts_pos_area = boxes_gt_ioa(nms_boxes, gts, pred_vector,False)
 
         output_binary = binary_after_boxes(output_binary, pos_imgs_boxes, (cfg.DATA.IMAGE_H, cfg.DATA.IMAGE_W))
@@ -265,17 +305,16 @@ def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criteri
             gt_imgs_boxes,_ = boxes_gt_ioa(nms_boxes, gts, boxes_to_gts_list,False)
             # draw_gt_with_RPboxes(gt_imgs_boxes, gts, name='train_gts')
             draw_gt_with_RPboxes(pos_imgs_boxes,gts,'train_pred', gt_imgs_boxes,torch.round(torch.sigmoid(output_binary.detach())))
-
+        infNCE_loss = loss_for_triplet(boxes_to_gts_list, q)
         cls_loss = cls_criterion(pred_vector, boxes_to_gts_list.unsqueeze(1))  # 1
-        # cls_loss = criterion(pred_vector,boxes_to_gts_list)  # 2
+        
         seg_loss = seg_criterion(output_binary.flatten(),gt_b_maps.flatten()) 
-        loss = seg_loss+cls_loss
+        loss = seg_loss+cls_loss +infNCE_loss
         loss.backward()
         optimizer.step()
 
         obj_num = len(pred_vector)
         correct_pred, y_pred_tags = binary_correct_pred_num(pred_vector, boxes_to_gts_list)  # 1
-        # correct_pred,y_pred_tags = correct_pred_num(pred_vector,boxes_to_gts_list) #2
     
 
         batch_time.update(time.time() - end)
@@ -288,7 +327,7 @@ def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criteri
         epoch_tot_p += boxes_to_gts_list.sum().cpu().data.item()
         true_p_list = (correct_pred + boxes_to_gts_list > 1).float()  # ture positive indexes are flagged as 1
         epoch_true_p += true_p_list.sum().cpu().data.item()
-
+        epoch_mae.update(MAE(output_binary, gts)/cfg.DATA.MAX_NUM)
         epoch_ioa.update(sum(gts_pos_area).cpu().data.item() / len(gts_pos_area))
         # if i % cfg.LOG.BATCH_FREQ == 0 and i != 0:
         #     train_log_string('ClassEpoch: [{0}][{1}/{2}]\t'
@@ -309,13 +348,15 @@ def train_joint(model, train_loader, epoch, optimizer, cls_criterion,seg_criteri
                          'recall: {3:.3f} -- '
                          'precision: {4:.3f} -- '
                          'f1: {5:.3f} -- '
-                         'ioa: {6:.3f} --'
-                         'seg loss: {7:.4f}'.format(epoch,
+                         'mae: {6:.3f} -- '
+                         'ioa: {7:.3f} --'
+                         'seg loss: {8:.4f}'.format(epoch,
                                                    epoch_cls_loss.avg,
                                                    epoch_correct_prd_num / epoch_total_objs_num,
                                                    epoch_true_p / epoch_tot_p,
                                                    epoch_true_p / epoch_tot_p_pred,
                                                    2*(epoch_true_p / epoch_tot_p)*(epoch_true_p / epoch_tot_p_pred)/(epoch_true_p / epoch_tot_p+epoch_true_p / epoch_tot_p_pred),
+                                                   epoch_mae.avg,
                                                    epoch_ioa.avg,
                                                    epoch_seg_loss.avg))
 
@@ -358,7 +399,8 @@ def eval_model(model, eval_loader, epoch):
             for img in imgs:
                 inputs.append({"image": img, "height": cfg.DATA.IMAGE_H, "width": cfg.DATA.IMAGE_W})
             with torch.no_grad():
-                nms_boxes, pred_vector, output_binary = model(inputs,mode='eval')
+                nms_boxes, pred_vector, output_binary,_ = model(inputs,mode='eval')
+                # pred_vector = sum(pred_vector,0)
                 boxes_to_gts_list = sum(boxes_to_gt(nms_boxes, gts), [])
                 boxes_to_gts_list = torch.Tensor(boxes_to_gts_list).float().cuda()  # 1
                 obj_num = len(pred_vector)
@@ -391,9 +433,9 @@ def eval_model(model, eval_loader, epoch):
                 E max
                 S
                 '''
-                # f_measure.update(evaluator.Eval_fmeasure()[0])
-                # e_measure.update(evaluator.Eval_Emeasure())
-                # s_measure.update(evaluator.Eval_Smeasure())
+                f_measure.update(evaluator.Eval_fmeasure()[0].max().item())
+                e_measure.update(evaluator.Eval_Emeasure().mean().item())
+                s_measure.update(evaluator.Eval_Smeasure())
                 # auc.update(evaluator.Eval_auc()[0])
                 # train_log_string('\tValEpoch: [{0}][{1}/{2}]\t'
                 #                 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -419,27 +461,28 @@ def eval_model(model, eval_loader, epoch):
                      'F1: {f1:.3f}\t-'
                      'IOA: {ioa.avg:.3f}-'
                      'MAE: {mae.avg:.3f}\t-'
-                    #  'F: {f_measure:.3f}\t-'
-                    #  'S: {s_measure:.3f}\t-'
-                    #  'E: {e_measure:.3f}\t-'
-                     'AUC: {auc:.3f}'
+                     'F: {f_measure:.3f}\t-'
+                     'E: {e_measure:.3f}\t-'
+                     'S: {s_measure:.3f}\t-'
+                    #  'AUC: {auc:.3f}'
                      .format(epoch,
                              acc=epoch_correct_prd_num / epoch_total_objs_num,
                              recall=epoch_true_p / epoch_tot_p,
-                             precision=epoch_true_p / epoch_tot_p_pred,
+                             precision=epoch_true_p / (epoch_tot_p_pred if epoch_tot_p_pred>0 else 1),
                              f1=2*(epoch_true_p / epoch_tot_p)*(epoch_true_p / epoch_tot_p_pred)/(epoch_true_p / epoch_tot_p+epoch_true_p / epoch_tot_p_pred),
                              ioa=epoch_ioa,
                              mae=mae,
-                            #  f_measure=f_measure.avg.cpu().data.item(),
-                            #  e_measure=e_measure.avg.cpu().data.item(),
-                            #  s_measure=s_measure.avg.cpu().data.item(),
-                             auc=auc.avg))
-
+                             f_measure=f_measure.avg,
+                             e_measure=e_measure.avg,
+                             s_measure=s_measure.avg
+                            #  ,auc=auc.avg
+                             ))
+    
 
 def main():
     train_loader = get_loader(cfg)
     if cfg.VAL.USE:
-        eval_loader = get_loader(cfg, mode="eval")
+        eval_loaders = get_loader(cfg, mode="eval")
     else:
         eval_loader = []
     model = CoS_Det_Net(cfg)
@@ -459,6 +502,18 @@ def main():
     optimizer_joint = optim.Adam(model.parameters(), lr=cfg.SOLVER.LR, weight_decay=0.0001)
     iterate = 0
     if cfg.SOLVER.JOINT:
+        # train_log_string("Transformer 4 layers no pos_emb(scaling) + constractive learning on rcnn box feature")
+        # train_log_string("pre_train starts")
+        # for epoch in range(50):
+        #     pre_train(model=model,
+        #                      train_loader=train_loader,
+        #                      epoch=epoch,
+        #                      optimizer=optimizer_joint)
+        # train_log_string("pre_train ends")
+        # train_log_string("Transformer 4 layers no pos_emb(scaling) no constractive learning")
+        # train_log_string("Transformer 8 layers no pos_emb(scaling) no constractive learning")
+        # train_log_string("Transformer 4 layers + pos_emb(scaling) no constractive learning")
+        # train_log_string("cross attention no pos_emb(scaling) no constractive learning")
         for epoch in range(cfg.SOLVER.MAX_EPOCHS):
             model.train()
             train_joint(model=model,
@@ -466,7 +521,9 @@ def main():
                              epoch=epoch,
                              optimizer=optimizer_joint,
                              cls_criterion=cls_criterion,
-                             seg_criterion = seg_criterion)
+                             seg_criterion = seg_criterion
+                            #  ,mode = "after_pretrain"
+                             )
             # train_seg(model=model,
             #           train_loader=train_loader,
             #           epoch=epoch,
@@ -479,7 +536,8 @@ def main():
             # if (epoch + 1) % cfg.LOG.EPOCH_FREQ == 0:
             if epoch % 5 == 0:
                 if cfg.VAL.USE:
-                    eval_model(model, eval_loader, epoch)
+                    for eval_loader in eval_loaders:
+                        eval_model(model, eval_loader, epoch)
 
             iterate += len(train_loader)
         
